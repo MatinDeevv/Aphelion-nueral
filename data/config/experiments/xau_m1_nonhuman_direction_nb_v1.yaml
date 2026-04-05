@@ -1,0 +1,30 @@
+schema_version: "1.0.0"
+experiment_name: "xau_m1_nonhuman_direction_nb"
+model_name: "xau_m1_nonhuman_direction_nb"
+version: "1.0.0"
+description: "First trust-gated institutional training path on the green nonhuman XAUUSD M1 dataset."
+dataset_ref: "dataset://xau_m1_nonhuman@1.0.0"
+target_column: "direction_60m"
+feature_families:
+  - "time"
+  - "session"
+  - "quality"
+  - "htf_context"
+  - "disagreement"
+  - "event_shape"
+  - "entropy"
+  - "multiscale"
+exclude_feature_columns: []
+model_family: "gaussian_nb_binary@1.0.0"
+positive_target_threshold: 0.0
+decision_threshold: 0.5
+evaluation_policy: "walk_forward_holdout"
+n_walk_forward_folds: 3
+min_train_rows: 2000
+embargo_rows: 240
+min_walk_forward_balanced_accuracy: 0.50
+min_test_balanced_accuracy: 0.50
+tags:
+  - "phase5"
+  - "institutional-training"
+  - "xau"

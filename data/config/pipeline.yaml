@@ -1,0 +1,108 @@
+# MT5Pipe — MetaTrader 5 Data Pipeline
+
+brokers:
+  broker_a:
+    broker_id: broker_a
+    terminal_path: "C:/Program Files/Eightcap Global MT5 Terminal/terminal64.exe"
+    login: 12345678
+    password: "${MT5_BROKER_A_PASSWORD}"
+    server: "Eightcap-Live"
+    timeout_ms: 30000
+    priority: 0
+    symbol_map:
+      # XAUUSD: "XAUUSD"  # uncomment if broker uses different symbol name
+
+  broker_b:
+    broker_id: broker_b
+    terminal_path: "C:/Program Files/Combat Capital Markets MT5 Terminal/terminal64.exe"
+    login: 87654321
+    password: "${MT5_BROKER_B_PASSWORD}"
+    server: "Combat-Live"
+    timeout_ms: 30000
+    priority: 1
+    symbol_map: {}
+
+symbols:
+  - XAUUSD
+
+storage:
+  root: "local_data/pipeline_data"
+  checkpoint_db: "checkpoints.db"
+  parquet_row_group_size: 500000
+  compression: "zstd"
+
+backfill:
+  tick_chunk_hours: 4
+  bar_chunk_days: 30
+  history_chunk_days: 90
+  max_retries: 3
+  retry_wait_seconds: 2.0
+
+live:
+  tick_poll_seconds: 0.25
+  snapshot_interval_seconds: 60
+  market_book_interval_seconds: 5
+  flush_interval_seconds: 30
+  buffer_max_rows: 50000
+
+merge:
+  bucket_ms: 100
+  max_spread_ratio: 0.005
+  max_mid_diff_ratio: 0.002
+  freshness_weight: 0.4
+  spread_weight: 0.3
+  continuity_weight: 0.3
+  conflict_log_threshold: 0.001
+  diagnostics_near_miss_factor: 5
+  min_dual_source_ratio: 0.001
+  hard_fail_on_low_dual_source: true
+
+bars:
+  timeframes:
+    - M1
+    - M2
+    - M3
+    - M4
+    - M5
+    - M6
+    - M10
+    - M12
+    - M15
+    - M20
+    - M30
+    - H1
+    - H2
+    - H3
+    - H4
+    - H6
+    - H8
+    - H12
+    - D1
+    - W1
+    - MN1
+
+dataset:
+  base_timeframe: M1
+  context_timeframes:
+    - M5
+    - M15
+    - H1
+    - H4
+    - D1
+  horizons_minutes:
+    - 5
+    - 15
+    - 30
+    - 60
+    - 240
+  triple_barrier_tp_bps: 50.0
+  triple_barrier_sl_bps: 50.0
+  triple_barrier_vol_lookback: 60
+  triple_barrier_vol_multiplier: 2.0
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+logging:
+  level: INFO
+  json_output: false

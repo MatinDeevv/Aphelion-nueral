@@ -1,0 +1,18 @@
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+# Legacy local storage roots
+data/
+gooddata/
+suselss/
+
+# Current local-only storage layout
+local_data/**
+!local_data/
+!local_data/README.md
+
+# Runtime artifacts
+logs/
+*.zip
