@@ -161,6 +161,8 @@ def test_tft_forward_and_output_contracts() -> None:
     assert output.vsn_weights is not None
     assert output.vsn_weights["past"].shape == (4, 8, 6)
     assert output.vsn_weights["future"].shape == (4, 8, 3)
+    assert output.attn_weights is not None
+    assert output.attn_weights["past"].shape == (4, 4, 8, 8)
 
     for horizon in HORIZONS:
         assert horizon in output.direction_logits
@@ -383,16 +385,42 @@ def test_attention_inspector_requires_encoder_hidden() -> None:
         mfe_preds={},
         encoder_hidden=None,
         vsn_weights=None,
+        attn_weights=None,
     )
     with pytest.raises(ValueError, match="encoder_hidden"):
         AttentionInspector.from_output(output)
 
 
-def test_attention_inspector_returns_none_without_stored_attention() -> None:
+def test_attention_inspector_mean_shape() -> None:
     batch = _make_batch(batch_size=2, steps=6, n_past=4, n_future=2, n_static=1)
     model = _make_model(n_past_features=4, n_future_features=2, n_static_features=1, d_model=16, steps=6)
     output = model(batch)
 
     inspector = AttentionInspector.from_output(output)
-    assert inspector.mean_attention is None
-    assert inspector.last_timestep_attention() is None
+    mean_attention = inspector.mean_attention
+
+    assert mean_attention is not None
+    assert tuple(mean_attention.shape) == (6, 6)
+
+
+def test_attention_inspector_last_timestep() -> None:
+    batch = _make_batch(batch_size=2, steps=6, n_past=4, n_future=2, n_static=1)
+    model = _make_model(n_past_features=4, n_future_features=2, n_static_features=1, d_model=16, steps=6)
+    output = model(batch)
+
+    inspector = AttentionInspector.from_output(output)
+    last_attention = inspector.last_timestep_attention()
+
+    assert last_attention is not None
+    assert tuple(last_attention.shape) == (6,)
+    assert torch.allclose(last_attention, inspector.mean_attention[-1, :])
+
+
+def test_model_output_attn_weights_stored() -> None:
+    batch = _make_batch(batch_size=2, steps=6, n_past=4, n_future=2, n_static=1)
+    model = _make_model(n_past_features=4, n_future_features=2, n_static_features=1, d_model=16, steps=6)
+    output = model(batch)
+
+    assert output.attn_weights is not None
+    assert output.attn_weights["past"] is not None
+    assert tuple(output.attn_weights["past"].shape) == (2, 4, 6, 6)

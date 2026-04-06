@@ -26,6 +26,7 @@ class ModelOutput:
     mfe_preds: dict[str, Tensor]
     encoder_hidden: Tensor | None = None
     vsn_weights: dict[str, Tensor] | None = None
+    attn_weights: dict[str, Tensor] | None = None
 
     def direction_probs(self, horizon: str) -> Tensor:
         """Return normalized direction probabilities for a given horizon."""

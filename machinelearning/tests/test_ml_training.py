@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import sys
 from pathlib import Path
 
@@ -14,7 +15,7 @@ if str(WORKSPACE_ROOT.parent) not in sys.path:
 
 from machinelearning.data import DEFAULT_SCHEMA
 from machinelearning.models import AphelionTFT
-from machinelearning.training import AphelionLightningModule
+from machinelearning.training import AphelionLightningModule, build_trainer, validate_artifact_dir
 from machinelearning.training.losses import (
     HORIZON_LABELS,
     LearnedTaskWeights,
@@ -24,6 +25,7 @@ from machinelearning.training.losses import (
     quantile_loss,
     regression_loss,
 )
+from machinelearning.training.train import train
 
 
 def test_quantile_loss_returns_zero_when_all_targets_are_nan() -> None:
@@ -142,6 +144,65 @@ def test_configure_optimizers_returns_expected_structure() -> None:
         for parameter in group["params"]
     }
     assert id(module.task_weights.log_sigma) in optimizer_params
+
+
+def test_build_trainer_cpu_safe() -> None:
+    trainer = build_trainer(
+        max_epochs=2,
+        n_gpus=0,
+        precision="bf16-mixed",
+        gradient_clip_val=1.0,
+    )
+
+    assert trainer.aphelion_config["accelerator"] == "cpu"
+    assert trainer.aphelion_config["devices"] == 1
+
+
+def test_build_trainer_bf16_requires_gpu() -> None:
+    trainer = build_trainer(
+        max_epochs=2,
+        n_gpus=0,
+        precision="bf16-mixed",
+        gradient_clip_val=1.0,
+    )
+
+    assert trainer.aphelion_config["precision"] == "32"
+
+
+def test_validate_artifact_dir_missing_raises() -> None:
+    with pytest.raises(FileNotFoundError):
+        validate_artifact_dir(Path("/nonexistent/path"))
+
+
+def test_train_function_signature() -> None:
+    signature = inspect.signature(train)
+    parameters = signature.parameters
+
+    assert list(parameters) == [
+        "artifact_dir",
+        "run_name",
+        "project_name",
+        "d_model",
+        "n_heads",
+        "n_lstm_layers",
+        "dropout",
+        "context_len",
+        "batch_size",
+        "lr",
+        "weight_decay",
+        "ic_loss_weight",
+        "max_epochs",
+        "n_gpus",
+        "num_workers",
+        "precision",
+        "gradient_clip_val",
+        "checkpoint_dir",
+    ]
+    assert parameters["artifact_dir"].default is inspect._empty
+    assert parameters["run_name"].default is inspect._empty
+    assert parameters["project_name"].default == "aphelion-research"
+    assert parameters["precision"].default == "bf16-mixed"
+    assert parameters["checkpoint_dir"].default == "checkpoints"
 
 
 def _synthetic_batch(batch_size: int, context_len: int) -> dict[str, torch.Tensor | dict[str, torch.Tensor]]:

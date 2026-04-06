@@ -154,7 +154,7 @@ class AphelionTFT(AphelionModel):
         enriched = self.static_enrichment(lstm_output, ctx_enrich)
         enriched = self._apply_temporal_mask(enriched, temporal_mask)
 
-        attended, _ = self.temporal_attention(enriched, temporal_mask)
+        attended, attn_weights = self.temporal_attention(enriched, temporal_mask)
         attended = self._apply_temporal_mask(attended, temporal_mask)
 
         refined = self.positionwise_grn(attended)
@@ -193,6 +193,7 @@ class AphelionTFT(AphelionModel):
             mfe_preds=mfe_preds,
             encoder_hidden=pred_repr,
             vsn_weights={"past": past_weights, "future": future_weights},
+            attn_weights={"past": attn_weights},
         )
 
     def _project_features(self, values: Tensor, projections: nn.ModuleList) -> Tensor:

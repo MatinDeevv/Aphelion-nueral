@@ -103,10 +103,10 @@ class AttentionInspector:
         if output.encoder_hidden is None:
             raise ValueError("ModelOutput does not include encoder_hidden.")
 
-        raw_attention = getattr(output, "attn_weights", None)
+        raw_attention = output.attn_weights
         attention_weights = None
-        if raw_attention is not None:
-            attention_weights = raw_attention.detach().float().cpu()
+        if raw_attention is not None and "past" in raw_attention:
+            attention_weights = raw_attention["past"].detach().float().cpu()
 
         return AttentionInspector(
             encoder_hidden=output.encoder_hidden.detach().float().cpu(),
@@ -115,7 +115,7 @@ class AttentionInspector:
 
     @property
     def mean_attention(self) -> Tensor | None:
-        """Return mean attention across batch and heads, or None if attention was not stored."""
+        """Return mean attention across batch and heads as a [T, T] tensor."""
 
         if self.attention_weights is None:
             return None
@@ -129,12 +129,12 @@ class AttentionInspector:
         )
 
     def last_timestep_attention(self) -> Tensor | None:
-        """Return last-timestep attention over the lookback window, or None if unavailable."""
+        """Return last-timestep attention over the lookback window as a [T] tensor."""
 
         mean_attention = self.mean_attention
         if mean_attention is None:
             return None
-        return mean_attention[-1]
+        return mean_attention[-1, :]
 
 
 __all__ = ["AttentionInspector", "VSNInterpreter"]

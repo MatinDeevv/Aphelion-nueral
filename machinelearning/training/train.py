@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,115 @@ BASELINE_BALANCED_ACC = 0.5354
 BASELINE_HOLDOUT_ACC = 0.5096
 DATASET_ARTIFACT_ID = "219cc1cdb344"
 DATASET_TRUST_SCORE = 98.11
+LOGGER = logging.getLogger(__name__)
+
+
+class _CompatTrainer:
+    """Small Trainer substitute for local test environments without Lightning installed."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.init_kwargs = dict(kwargs)
+        self.aphelion_config = {
+            "accelerator": kwargs.get("accelerator"),
+            "devices": kwargs.get("devices"),
+            "strategy": kwargs.get("strategy"),
+            "precision": kwargs.get("precision"),
+        }
+        self.callback_metrics: dict[str, Any] = {}
+
+    def fit(self, *_: Any, **__: Any) -> None:
+        raise RuntimeError("Lightning is required to run training fits in this environment.")
+
+    def test(self, *_: Any, **__: Any) -> None:
+        raise RuntimeError("Lightning is required to run training tests in this environment.")
+
+
+class _CompatDDPStrategy:
+    """Small DDP strategy substitute for local test environments without Lightning installed."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = dict(kwargs)
+
+
+def validate_artifact_dir(artifact_dir: str | Path) -> Path:
+    """Ensure the artifact directory contains usable train and validation parquet splits."""
+
+    artifact_path = Path(artifact_dir)
+    if not artifact_path.exists():
+        raise FileNotFoundError(f"Artifact directory does not exist: {artifact_path}")
+
+    for split_name in ("split=train", "split=val"):
+        split_dir = artifact_path / split_name
+        if not split_dir.is_dir():
+            raise FileNotFoundError(f"Missing required split directory: {split_dir}")
+        if not any(split_dir.glob("*.parquet")):
+            raise FileNotFoundError(f"No parquet files found in required split directory: {split_dir}")
+
+    return artifact_path
+
+
+def build_trainer(
+    *,
+    max_epochs: int,
+    n_gpus: int,
+    precision: str,
+    gradient_clip_val: float,
+    logger: Any = None,
+    callbacks: list[Any] | None = None,
+    **trainer_kwargs: Any,
+) -> Any:
+    """Build a Trainer with an explicit GPU-only BF16/DDP path and a testable CPU fallback."""
+
+    has_gpu = n_gpus > 0 and torch.cuda.is_available()
+    resolved_strategy: Any
+    resolved_precision = precision
+    if has_gpu:
+        strategy_cls = DDPStrategy or _CompatDDPStrategy
+        resolved_strategy = strategy_cls(
+            find_unused_parameters=False,
+            gradient_as_bucket_view=True,
+        )
+        resolved_accelerator = "gpu"
+        resolved_devices = n_gpus
+        sync_batchnorm = True
+        benchmark = True
+    else:
+        resolved_accelerator = "cpu"
+        resolved_devices = 1
+        resolved_strategy = "auto"
+        resolved_precision = "32"
+        sync_batchnorm = False
+        benchmark = False
+        LOGGER.warning("GPU not available — training on CPU with fp32")
+
+    trainer_class = _CompatTrainer if pl is None else pl.Trainer
+    trainer = trainer_class(
+        max_epochs=max_epochs,
+        accelerator=resolved_accelerator,
+        devices=resolved_devices,
+        strategy=resolved_strategy,
+        precision=resolved_precision,
+        gradient_clip_val=gradient_clip_val,
+        gradient_clip_algorithm="norm",
+        logger=logger,
+        callbacks=callbacks or [],
+        log_every_n_steps=50,
+        benchmark=benchmark,
+        deterministic=False,
+        sync_batchnorm=sync_batchnorm,
+        **trainer_kwargs,
+    )
+    setattr(
+        trainer,
+        "aphelion_config",
+        {
+            "accelerator": resolved_accelerator,
+            "devices": resolved_devices,
+            "strategy": resolved_strategy,
+            "precision": resolved_precision,
+        },
+    )
+    return trainer
 
 
 def train(
@@ -55,10 +165,10 @@ def train(
 ) -> None:
     """Run one end-to-end research training job so model quality, checkpoints, and metadata stay linked."""
 
+    artifact_dir = validate_artifact_dir(artifact_dir)
     if pl is None or WandbLogger is None or ModelCheckpoint is None or EarlyStopping is None or DDPStrategy is None:
         raise RuntimeError("lightning and wandb must be installed to run machinelearning.training.train().")
 
-    artifact_dir = Path(artifact_dir)
     checkpoint_dir = Path(checkpoint_dir)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     normalizer_path = checkpoint_dir / f"{run_name}_normalizer.json"
@@ -145,7 +255,7 @@ def train(
         LearningRateMonitor(logging_interval="step"),
     ]
 
-    trainer_kwargs = _build_trainer_kwargs(
+    trainer = build_trainer(
         max_epochs=max_epochs,
         n_gpus=n_gpus,
         precision=precision,
@@ -153,7 +263,6 @@ def train(
         logger=wandb_logger,
         callbacks=callbacks,
     )
-    trainer = pl.Trainer(**trainer_kwargs)
 
     trainer.fit(lightning_module, dm)
     fit_metrics = {name: _metric_to_float(value) for name, value in trainer.callback_metrics.items()}
@@ -167,55 +276,6 @@ def train(
     print(f"val/balanced_acc_60m:{best_balanced_acc:.4f}")
     print(f"baseline:             {BASELINE_BALANCED_ACC:.4f}")
     print(f"delta:               {best_balanced_acc - BASELINE_BALANCED_ACC:+.4f}")
-
-
-def _build_trainer_kwargs(
-    max_epochs: int,
-    n_gpus: int,
-    precision: str,
-    gradient_clip_val: float,
-    logger: Any,
-    callbacks: list[Any],
-) -> dict[str, Any]:
-    """Prefer the requested GPU/DDP path, but fall back cleanly so local validation is still possible."""
-
-    has_gpu = torch.cuda.is_available() and n_gpus > 0
-    if has_gpu:
-        return {
-            "max_epochs": max_epochs,
-            "accelerator": "gpu",
-            "devices": n_gpus,
-            "strategy": DDPStrategy(
-                find_unused_parameters=False,
-                gradient_as_bucket_view=True,
-            ),
-            "precision": precision,
-            "gradient_clip_val": gradient_clip_val,
-            "gradient_clip_algorithm": "norm",
-            "logger": logger,
-            "callbacks": callbacks,
-            "log_every_n_steps": 50,
-            "benchmark": True,
-            "deterministic": False,
-            "sync_batchnorm": True,
-        }
-
-    resolved_precision = precision if precision not in {"bf16-mixed", "16-mixed"} else "32-true"
-    return {
-        "max_epochs": max_epochs,
-        "accelerator": "cpu",
-        "devices": 1,
-        "strategy": "auto",
-        "precision": resolved_precision,
-        "gradient_clip_val": gradient_clip_val,
-        "gradient_clip_algorithm": "norm",
-        "logger": logger,
-        "callbacks": callbacks,
-        "log_every_n_steps": 50,
-        "benchmark": False,
-        "deterministic": False,
-        "sync_batchnorm": False,
-    }
 
 
 def _metric_to_float(value: Any) -> float:

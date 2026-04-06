@@ -72,6 +72,12 @@ class WalkForwardSplitter:
     Each fold keeps all earlier rows for training, applies an embargo gap to
     prevent forward-horizon label leakage, and validates on the next
     contiguous block of rows.
+
+    Example:
+        embargo ensures ``val_start_idx = train_end_idx + embargo_rows + 1`` so
+        that no label in the validation split was computed using information
+        from the training rows. At ``embargo_rows=240`` on M1 data, this covers
+        the maximum label horizon of 240m.
     """
 
     def __init__(
@@ -126,6 +132,10 @@ class WalkForwardSplitter:
                     "dataset too small for requested walk-forward config after fold construction "
                     f"(fold={fold_index}, val_end={val_end}, rows={row_count})"
                 )
+
+            train_end_idx = train_end - 1
+            val_start_idx = val_start
+            assert val_start_idx >= train_end_idx + self.embargo_rows + 1
 
             train_df = ordered.slice(0, train_end)
             val_df = ordered.slice(val_start, val_size)

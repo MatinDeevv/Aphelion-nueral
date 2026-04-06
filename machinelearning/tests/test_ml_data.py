@@ -78,6 +78,32 @@ def test_normalizer_fit_transform_save_load_roundtrip_is_exact(workspace_tmp_pat
     assert first.to_dict(as_series=False) == second.to_dict(as_series=False)
 
 
+def test_normalizer_all_null_column(workspace_tmp_path: Path) -> None:
+    frame = _base_frame(rows=8, feature_offset=10.0).with_columns(
+        pl.lit(None, dtype=pl.Float64).alias(DEFAULT_SCHEMA.past_observed[0]),
+    )
+    normalizer = RobustFeatureNormalizer(schema=DEFAULT_SCHEMA)
+
+    normalizer.fit(frame)
+    transformed = normalizer.transform(frame)
+
+    assert DEFAULT_SCHEMA.past_observed[0] in normalizer.constant_columns
+    assert transformed.get_column(DEFAULT_SCHEMA.past_observed[0]).to_list() == [0.0] * frame.height
+
+
+def test_normalizer_constant_columns_survive_roundtrip(workspace_tmp_path: Path) -> None:
+    frame = _base_frame(rows=8, feature_offset=10.0).with_columns(
+        pl.lit(None, dtype=pl.Float64).alias(DEFAULT_SCHEMA.past_observed[1]),
+    )
+    normalizer = RobustFeatureNormalizer(schema=DEFAULT_SCHEMA).fit(frame)
+
+    path = workspace_tmp_path / "normalizer_constant_columns.json"
+    normalizer.save(path)
+    loaded = RobustFeatureNormalizer.load(path)
+
+    assert loaded.constant_columns == normalizer.constant_columns
+
+
 def test_normalizer_refuses_transform_before_fit() -> None:
     normalizer = RobustFeatureNormalizer(schema=DEFAULT_SCHEMA)
     with pytest.raises(RuntimeError):
@@ -218,6 +244,26 @@ def test_walk_forward_splitter_yields_three_expanding_folds() -> None:
         previous_train_rows = train_df.height
 
 
+def test_walkforward_embargo_exact_boundary() -> None:
+    frame = _walkforward_frame(rows=40)
+    splitter = WalkForwardSplitter(n_folds=3, val_fraction=0.30, embargo_rows=2)
+
+    for train_df, val_df in splitter.split(frame):
+        train_end_row = int(train_df.get_column("row_id").max())
+        val_start_row = int(val_df.get_column("row_id").min())
+        assert val_start_row == train_end_row + splitter.embargo_rows + 1
+
+
+def test_walkforward_no_data_overlap() -> None:
+    frame = _walkforward_frame(rows=40)
+    splitter = WalkForwardSplitter(n_folds=3, val_fraction=0.30, embargo_rows=2)
+
+    for train_df, val_df in splitter.split(frame):
+        train_times = set(train_df.get_column(TIME_INDEX_COLUMN).to_list())
+        val_times = set(val_df.get_column(TIME_INDEX_COLUMN).to_list())
+        assert train_times.isdisjoint(val_times)
+
+
 def test_walk_forward_splitter_raises_when_dataset_too_small() -> None:
     frame = _walkforward_frame(rows=20)
     splitter = WalkForwardSplitter(n_folds=3, val_fraction=0.50, embargo_rows=4)
@@ -255,6 +301,31 @@ def test_inference_loader_prepare_batch_shapes_and_no_targets(workspace_tmp_path
     assert tuple(batch["mask"].shape) == (1, 4)
     assert tuple(batch["time_idx"].shape) == (1,)
     assert "targets" not in batch
+
+
+def test_inference_loader_unsorted_raises(workspace_tmp_path: Path) -> None:
+    frame = _base_frame(rows=12, feature_offset=4.0).sort(TIME_INDEX_COLUMN, descending=True)
+    normalizer = RobustFeatureNormalizer(schema=DEFAULT_SCHEMA).fit(frame.sort(TIME_INDEX_COLUMN))
+    normalizer_path = workspace_tmp_path / "unsorted_inference_normalizer.json"
+    normalizer.save(normalizer_path)
+
+    loader = InferenceLoader(normalizer_path=normalizer_path, context_len=4)
+
+    with pytest.raises(ValueError, match="DataFrame must be sorted by time_utc in ascending order"):
+        loader.prepare_batch(frame)
+
+
+def test_inference_loader_sorted_succeeds(workspace_tmp_path: Path) -> None:
+    frame = _base_frame(rows=12, feature_offset=4.0)
+    normalizer = RobustFeatureNormalizer(schema=DEFAULT_SCHEMA).fit(frame)
+    normalizer_path = workspace_tmp_path / "sorted_inference_normalizer.json"
+    normalizer.save(normalizer_path)
+
+    loader = InferenceLoader(normalizer_path=normalizer_path, context_len=4)
+    batch = loader.prepare_batch(frame)
+
+    assert tuple(batch["past_features"].shape) == (1, 4, DEFAULT_SCHEMA.n_past)
+    assert tuple(batch["future_known"].shape) == (1, 4, DEFAULT_SCHEMA.n_future)
 
 
 def test_inference_loader_raises_when_context_is_too_short(workspace_tmp_path: Path) -> None:

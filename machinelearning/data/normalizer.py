@@ -34,12 +34,20 @@ class RobustFeatureNormalizer:
         self.schema = schema
         self.columns = list(columns or NORMALIZED_FEATURE_COLUMNS)
         self.stats: dict[str, dict[str, float]] = {}
+        self._constant_columns: set[str] = set()
         self._fitted = False
+
+    @property
+    def constant_columns(self) -> frozenset[str]:
+        """Return columns that carried no usable signal during fitting."""
+
+        return frozenset(self._constant_columns)
 
     def fit(self, df: pl.DataFrame) -> "RobustFeatureNormalizer":
         """Fit per-column median and IQR statistics on a training dataframe."""
 
         stats: dict[str, dict[str, float]] = {}
+        constant_columns: set[str] = set()
         for column in self.columns:
             if column not in df.columns:
                 warnings.warn(
@@ -57,7 +65,8 @@ class RobustFeatureNormalizer:
             )
             if series.len() == 0:
                 median = 0.0
-                iqr = IQR_FLOOR
+                iqr = 1.0
+                constant_columns.add(column)
             else:
                 median = _coerce_float(series.median(), 0.0)
                 q1 = _coerce_float(series.quantile(0.25, interpolation="linear"), median)
@@ -67,6 +76,7 @@ class RobustFeatureNormalizer:
             stats[column] = {"median": median, "iqr": iqr}
 
         self.stats = stats
+        self._constant_columns = constant_columns
         self._fitted = True
         return self
 
@@ -86,6 +96,9 @@ class RobustFeatureNormalizer:
         expressions = []
         for column in self.columns:
             if column in missing_columns:
+                expressions.append(pl.lit(0.0).alias(column))
+                continue
+            if column in self._constant_columns:
                 expressions.append(pl.lit(0.0).alias(column))
                 continue
 
@@ -121,6 +134,7 @@ class RobustFeatureNormalizer:
                 "targets": list(self.schema.targets),
             },
             "columns": list(self.columns),
+            "constant_columns": sorted(self._constant_columns),
             "stats": self.stats,
         }
         target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -147,6 +161,7 @@ class RobustFeatureNormalizer:
             }
             for column, values in payload["stats"].items()
         }
+        normalizer._constant_columns = set(payload.get("constant_columns", []))
         normalizer._fitted = True
         return normalizer
 

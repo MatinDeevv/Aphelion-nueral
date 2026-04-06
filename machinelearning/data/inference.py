@@ -31,7 +31,9 @@ class InferenceLoader:
 
     This keeps training-time feature statistics and deployment-time preprocessing
     aligned so the live model sees the same normalization and schema semantics
-    that were used during fitting.
+    that were used during fitting. Callers must pass rows already sorted by
+    ``time_utc`` in ascending order so the final context window matches the
+    actual latest bars seen in production.
     """
 
     def __init__(
@@ -75,6 +77,11 @@ class InferenceLoader:
             )
         if TIME_INDEX_COLUMN not in df.columns:
             raise ValueError(f"Input dataframe is missing required time column '{TIME_INDEX_COLUMN}'")
+        if not df.get_column(TIME_INDEX_COLUMN).is_sorted():
+            raise ValueError(
+                "DataFrame must be sorted by time_utc in ascending order. "
+                "Got non-monotonic timestamps. Call df.sort('time_utc') before prepare_batch()."
+            )
 
         prepared = self._prepare_dataframe(df)
         context_df = prepared.tail(self.context_len)
