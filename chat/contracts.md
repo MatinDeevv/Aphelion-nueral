@@ -1,5 +1,16 @@
 # Contract Change Log
 
+## Contract Change Rule
+
+A contract change is not complete until:
+1. The change is logged here with old/new/impact
+2. The affected modules are updated
+3. At least one test verifies the new behavior
+4. The raising agent has confirmed resolution in their agent log
+
+Logging a change here without tests is not a contract change.
+It is an intention. Do not confuse the two.
+
 All public boundary changes **must** be logged here before or immediately after the change.
 
 Human review notes do NOT belong in this file.
@@ -517,6 +528,18 @@ notes: AttentionInspector currently returns None for temporal attention summarie
 ```
 
 ### [2026-04-05 20:00]
+
+```
+agent: agent_2
+type: contract-change
+module: machinelearning.models.base.ModelOutput
+symbol: attn_weights
+old: ModelOutput exposed prediction heads, encoder_hidden, and VSN weights only, so TemporalSelfAttention weights were dropped during forward passes and AttentionInspector could only return None for temporal attention summaries
+new: ModelOutput now includes attn_weights: dict[str, Tensor] | None, with AphelionTFT storing TemporalSelfAttention weights under attn_weights["past"] shaped [B, n_heads, T, T]
+impact: AttentionInspector can now return real [T, T] mean attention and [T] last-timestep attention tensors, and downstream tests can verify the temporal-attention contract directly
+docs_updated: yes
+notes: verified by test_attention_inspector_mean_shape, test_attention_inspector_last_timestep, test_model_output_attn_weights_stored, and the end-to-end model forward smoke test
+```
 
 ```
 agent: agent_1

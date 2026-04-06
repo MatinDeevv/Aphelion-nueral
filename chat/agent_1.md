@@ -109,3 +109,13 @@ area: machinelearning/data
 update: added a pure-Polars WalkForwardSplitter with embargo-aware expanding temporal folds plus WalkForwardResult fold aggregation/summary helpers, and added an InferenceLoader that reloads the saved normalizer JSON and rebuilds the single-sample batch dict expected by AphelionTFT.forward().
 update: machinelearning.data now exports WalkForwardSplitter, WalkForwardResult, and InferenceLoader alongside the existing schema/dataset/datamodule surface. Inference preprocessing stays aligned with training semantics: sort by time_utc, fill missing feature/static columns deterministically, preserve _filled-derived mask behavior, normalize with the saved stats, and omit targets from inference batches.
 verification: python -m pytest machinelearning/tests/test_ml_data.py -q -p no:cacheprovider -> 15 passed in 2.59s; compileall on machinelearning/data and machinelearning/tests/test_ml_data.py -> True
+
+[2026-04-06 12:00]
+phase: Phase 6 hardening
+area: machinelearning/data
+fixes_applied:
+	- clarified and asserted exact walk-forward embargo semantics at the fold boundary
+	- hardened RobustFeatureNormalizer for all-null columns with persisted constant-column metadata
+	- made InferenceLoader reject non-monotonic time_utc input instead of silently reordering deployment batches
+tests_added: 8
+verification: pytest machinelearning/tests -q -p no:cacheprovider -> 64 passed

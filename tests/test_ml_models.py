@@ -424,3 +424,20 @@ def test_model_output_attn_weights_stored() -> None:
     assert output.attn_weights is not None
     assert output.attn_weights["past"] is not None
     assert tuple(output.attn_weights["past"].shape) == (2, 4, 6, 6)
+
+
+def test_attention_inspector_returns_none_without_attn_weights_mapping() -> None:
+    output = ModelOutput(
+        direction_logits={},
+        tb_logits={},
+        return_preds={},
+        mae_preds={},
+        mfe_preds={},
+        encoder_hidden=torch.randn(2, 16),
+        vsn_weights=None,
+        attn_weights=None,
+    )
+
+    inspector = AttentionInspector.from_output(output)
+    assert inspector.mean_attention is None
+    assert inspector.last_timestep_attention() is None

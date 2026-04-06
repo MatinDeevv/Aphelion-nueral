@@ -9,6 +9,35 @@ Scope guard:
 - `chat/contracts.md` = boundary/API/schema changes only
 - `chat/coordination.md` = blockers/requests/handoffs/coordination only
 
+## Open Items
+
+This section tracks all cross-agent gaps that are open.
+When an item is resolved, move it to ## Resolved with the fix date.
+An item is not resolved until the fix is verified in tests.
+
+Template:
+[YYYY-MM-DD HH:MM]
+item: <one-line description>
+raised_by: agent_N
+blocks: agent_N [if another agent is waiting on this]
+resolution: <empty until resolved>
+
+None.
+
+## Resolved
+
+[2026-04-06 12:00]
+item: attention weights gap left unimplemented after model interpretability landed
+raised_by: agent_2
+blocks: agent_2
+resolution: ModelOutput now stores attn_weights["past"], AphelionTFT forwards TemporalSelfAttention weights, AttentionInspector returns real tensors, and test coverage verifies the contract end to end.
+
+[2026-04-06 12:00]
+item: train.py DDP and BF16 path existed without independent verification or early artifact-dir validation
+raised_by: agent_3
+blocks: agent_3
+resolution: train.py now exposes build_trainer() and validate_artifact_dir(), BF16 is GPU-gated, CPU fallback is explicit and logged, and targeted tests verify the configuration path without requiring GPUs.
+
 ---
 
 ## Active Blockers
@@ -254,3 +283,12 @@ summary: Added AttentionInspector as the model-layer interpretability hook, but 
 needs: If Agent 3 wants actual temporal attention plots after training, the next round should extend the model output contract and AphelionTFT forward path to persist TemporalSelfAttention attn_weights explicitly.
 files: machinelearning/models/interpret.py, tests/test_ml_models.py
 ```
+
+## Hardening Pass Complete
+
+[2026-04-06]
+gaps_closed: 6
+tests_added: 18
+tests_total: 64
+open_items: 0
+notes: All requested Phase 6 hardening gaps are closed and verified. The machinelearning suite now includes a bridge file so `pytest machinelearning/tests -q -p no:cacheprovider` exercises the full Phase 6 stack layout in this worktree, including the model contract tests that still live under the repository-level tests directory.

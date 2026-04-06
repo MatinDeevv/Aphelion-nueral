@@ -245,4 +245,14 @@ update: cleaned the requested probe noise from machinelearning/probe_dir/ and ma
 needs: Code path is ready for real training, but I did not run an end-to-end Lightning + W&B experiment in this local environment because lightning and wandb are not installed here and the workspace is CPU-only. The package imports cleanly and the full machinelearning unit suite is green.
 files: machinelearning/training/__init__.py, machinelearning/training/losses.py, machinelearning/training/module.py, machinelearning/training/train.py, machinelearning/tests/test_ml_training.py, chat/agent_3.md, chat/contracts.md
 verification: pytest machinelearning/tests/test_ml_training.py -q -> 10 passed in 3.53s; pytest machinelearning/tests -q -> 25 passed in 3.55s; python import smoke for machinelearning.training -> AphelionLightningModule and train imported successfully; compileall over machinelearning/training and machinelearning/tests/test_ml_training.py -> True/True
+
+[2026-04-06 12:00]
+phase: Phase 6 hardening
+area: machinelearning/training
+fixes_applied:
+	- refactored trainer construction into build_trainer() with explicit GPU-only DDP/BF16 behavior and a defensive CPU fp32 fallback
+	- added validate_artifact_dir() so bad parquet roots fail immediately before training setup
+	- added integration smoke coverage for data -> model -> training execution on synthetic parquet splits
+tests_added: 5
+verification: pytest machinelearning/tests -q -p no:cacheprovider -> 64 passed
 ```

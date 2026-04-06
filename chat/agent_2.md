@@ -149,3 +149,12 @@ summary: Hardened the Phase 6 model suite and added the first post-training inte
 fix: QuantileHead previously emitted unconstrained raw quantiles, so higher quantiles could be below lower quantiles. I changed it to emit a base quantile plus positive cumulative increments, making return_preds monotonic along the quantile axis by construction.
 update: Added machinelearning.models.interpret with VSNInterpreter for past-feature importance summaries and AttentionInspector for temporal-attention inspection. Because ModelOutput still does not store attention weights, AttentionInspector currently returns None for mean_attention/last_timestep_attention; I logged that as a coordination note rather than expanding the output contract in this round.
 verification: python -m pytest tests/test_ml_models.py -q -p no:cacheprovider -> 21 passed in 2.91s; python public-surface smoke import for AphelionTFT/VSNInterpreter/AttentionInspector/ModelOutput -> ok
+
+[2026-04-06 12:00]
+phase: Phase 6 hardening
+area: machinelearning/models
+fixes_applied:
+	- extended ModelOutput and AphelionTFT forward() to persist temporal self-attention weights for interpretability
+	- upgraded AttentionInspector to return real mean-attention and last-timestep attention tensors
+tests_added: 5
+verification: pytest machinelearning/tests -q -p no:cacheprovider -> 64 passed

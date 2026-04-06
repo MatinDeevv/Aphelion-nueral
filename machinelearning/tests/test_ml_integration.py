@@ -32,7 +32,13 @@ from machinelearning.training import AphelionLightningModule
 
 def test_full_data_to_model_forward(tmp_path: Path) -> None:
     artifact_dir = _synthetic_parquet_splits(tmp_path)
-    dm = AphelionDataModule(artifact_dir=artifact_dir, context_len=16, batch_size=4, num_workers=0)
+    dm = AphelionDataModule(
+        artifact_dir=artifact_dir,
+        context_len=16,
+        batch_size=4,
+        num_workers=0,
+        pin_memory=False,
+    )
     dm.setup()
 
     batch = next(iter(dm.train_dataloader()))
@@ -59,7 +65,13 @@ def test_full_data_to_model_forward(tmp_path: Path) -> None:
 
 def test_full_training_step(tmp_path: Path) -> None:
     artifact_dir = _synthetic_parquet_splits(tmp_path)
-    dm = AphelionDataModule(artifact_dir=artifact_dir, context_len=16, batch_size=4, num_workers=0)
+    dm = AphelionDataModule(
+        artifact_dir=artifact_dir,
+        context_len=16,
+        batch_size=4,
+        num_workers=0,
+        pin_memory=False,
+    )
     dm.setup()
 
     batch = next(iter(dm.train_dataloader()))
@@ -84,7 +96,13 @@ def test_full_training_step(tmp_path: Path) -> None:
 
 def test_walkforward_on_real_dataset_split(tmp_path: Path) -> None:
     artifact_dir = _synthetic_parquet_splits(tmp_path)
-    dm = AphelionDataModule(artifact_dir=artifact_dir, context_len=16, batch_size=4, num_workers=0)
+    dm = AphelionDataModule(
+        artifact_dir=artifact_dir,
+        context_len=16,
+        batch_size=4,
+        num_workers=0,
+        pin_memory=False,
+    )
     dm.setup()
 
     assert dm.train_dataset is not None
@@ -99,7 +117,13 @@ def test_walkforward_on_real_dataset_split(tmp_path: Path) -> None:
 
 def test_vsn_interpreter_on_real_forward(tmp_path: Path) -> None:
     artifact_dir = _synthetic_parquet_splits(tmp_path)
-    dm = AphelionDataModule(artifact_dir=artifact_dir, context_len=16, batch_size=4, num_workers=0)
+    dm = AphelionDataModule(
+        artifact_dir=artifact_dir,
+        context_len=16,
+        batch_size=4,
+        num_workers=0,
+        pin_memory=False,
+    )
     dm.setup()
 
     batch = next(iter(dm.train_dataloader()))
@@ -129,6 +153,7 @@ def test_inference_loader_roundtrip(tmp_path: Path) -> None:
         batch_size=4,
         num_workers=0,
         normalizer_save_path=normalizer_path,
+        pin_memory=False,
     )
     dm.setup()
 
