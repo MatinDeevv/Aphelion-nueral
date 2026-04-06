@@ -1,80 +1,70 @@
-Phase 5 Complete. Phase 6 Start.
+Phase 6 Complete. Phase 7 Start.
 
 Status
 
-Phase 5 is accepted as complete. The production path is green:
-- dataset://xau_m1_nonhuman@1.0.0 published, trust 98.11
-- 215,777 canonical dual-source rows, dual_source_ratio=0.1639
-- gaussian_nb_binary@1.0.0 baseline: walk_forward_balanced_accuracy=0.5354,
-  holdout_balanced_accuracy=0.5096
+Phase 6 is accepted as complete.
+  - 64 passing tests, zero failures
+  - Full stack: data → TFT → training → evaluation
+  - Attention weights, conformal-ready quantile heads,
+    walk-forward splitter, inference loader all hardened
+  - Coordination and contract discipline verified
 
-That baseline is now the floor. Everything in Phase 6 is evaluated
-against it. If you cannot beat 0.5354 walk-forward balanced accuracy,
-you have not added value.
+Phase 7 has four simultaneous goals:
 
-What Phase 6 is
+  1. Expand the dataset — wider synchronized history
+  2. Regime detection + MoE gating
+  3. Conformal prediction + position sizing interface
+  4. Backtest engine
 
-Phase 6 is the deep learning stack in APH/machinelearning/.
+These are coordinated across 3 agents. The dependency
+order matters:
 
-This is a separate package from mt5pipe. It does NOT touch mt5pipe
-internals. It reads from published dataset artifacts only — through
-the parquet files that the compiler already produced. It does not
-re-implement anything the DataPipeline already owns.
+  dataset width → regime detection → MoE gating
+  TFT quantile outputs → conformal → position sizing
+  signals + sizing → backtest
 
-The center of gravity for Phase 6 is:
-  APH/machinelearning/
-    data/       Agent 1
-    models/     Agent 2
-    training/   Agent 3
+Agent ownership:
+  Agent 1: DataPipeline — dataset expansion
+  Agent 2: machinelearning/regime/ — regime + MoE
+  Agent 3: machinelearning/signal/ and APH/backtest/
 
-The goal is a Temporal Fusion Transformer trained on
-dataset://xau_m1_nonhuman@1.0.0, producing calibrated multi-horizon
-signals that demonstrably beat the gaussian_nb_binary baseline.
+Context that must not be lost:
 
-What Phase 6 must not do
+  Baseline to beat: walk_forward_balanced_accuracy = 0.5354
+  Live feed: both brokers running, synchronized
+  Production slice: 2026-03-30..2026-04-02 (4 days)
+  Target: expand to at least 90 days of synchronized history
+  Purpose: paper trading first, then live
 
-Do not re-implement the DataPipeline. Do not import mt5pipe internals.
-Do not touch chat/contracts.md for mt5pipe boundary changes unless
-something in mt5pipe actually needs to change. The machinelearning/
-package is self-contained and reads parquet only.
+What Phase 7 must not do:
 
-Do not add complexity you cannot evaluate. Every architectural decision
-must be justified against the baseline. If it does not move the IC or
-balanced accuracy, it is not in scope.
+  - Do not touch the Phase 6 machinelearning/ stack internals
+    unless a specific cross-phase contract requires it
+  - Do not retrain the TFT until Agent 1 has delivered
+    the wider dataset and it passes the truth gate
+  - Do not weaken the DataPipeline truth gate to
+    make the wider range compile faster
+  - Do not build a live execution layer yet —
+    paper trading first means signal generation and
+    backtest only, no order submission
 
-Coordination discipline
+Coordination discipline: same rules as always.
+  feedbacks/latest.md        human steering
+  chat/contracts.md          boundary changes only
+  chat/coordination.md       blockers and handoffs
+  chat/agent_{1,2,3}.md      per-agent logs
 
-Same rules as always:
-  feedbacks/latest.md     human steering — read before starting
-  chat/contracts.md       machinelearning/ boundary changes only
-  chat/coordination.md    blockers / handoffs between agents
-  chat/agent_{1,2,3}.md  per-agent logs
+Phase 7 acceptance criteria:
 
-Agent 3 owns training/ and is the primary quant researcher on this
-phase. Agents 1 and 2 build what Agent 3 needs to train.
+  1. At least 60 days of dual-broker synchronized
+     history compiled and truth-gated
+  2. HMM regime detector running on real feature data
+  3. MoE gating layer tested against TFT encoder output
+  4. Conformal prediction intervals on TFT quantile outputs
+  5. SignalRecord contract defined and implemented
+  6. Kelly-based position sizing consuming SignalRecords
+  7. Vectorized backtest engine running on historical signals
+  8. Backtest produces Sharpe, max drawdown, win rate
+     that are comparable to the gaussian_nb baseline
 
-Frozen from Phase 5
-
-Do not change:
-  - mt5pipe package structure
-  - DatasetSpec / ExperimentSpec / TrustReport contracts
-  - The canonical dataset artifact and its published alias
-  - Coordination file discipline
-
-Phase 6 acceptance criteria
-
-Phase 6 is complete only when:
-  1. machinelearning/ is a working importable Python package
-  2. AphelionTFT trains end-to-end on the published parquet splits
-  3. val/ic_60m > 0 (the model has extracted some signal)
-  4. walk-forward balanced accuracy on direction_60m > 0.5354
-  5. The training run is logged to W&B with full hyperparameter config
-  6. A trained model artifact is saved to APH/checkpoints/
-  7. The normalizer is saved alongside the checkpoint for inference use
-
-Required behavior before new work starts
-
-All agents must:
-  - Read this file before starting Phase 6 work
-  - Summarize in their agent log what they are acting on
-  - Log any conflict with their current prompt in chat/coordination.md
+All agents must read this file before starting.
