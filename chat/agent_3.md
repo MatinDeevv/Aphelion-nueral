@@ -255,4 +255,24 @@ fixes_applied:
 	- added integration smoke coverage for data -> model -> training execution on synthetic parquet splits
 tests_added: 5
 verification: pytest machinelearning/tests -q -p no:cacheprovider -> 64 passed
+
+### [2026-04-06 02:50:52 -04:00] agent_3 - Phase 7 signal/backtest complete
+
+feedback_read: yes
+feedback_source: feedbacks/latest.md
+feedback_summary: feedbacks/latest.md is stale and still points to the completed Phase 6 training layer. I logged that conflict in chat/coordination.md and followed the active Phase 7 prompt, keeping the work isolated to machinelearning/signal, APH/backtest, synthetic tests, and chat logs.
+phase: Phase 7
+area: machinelearning/signal | APH/backtest
+
+```
+agent: agent_3
+type: completion
+area: machinelearning/signal | APH/backtest
+summary: Delivered the Phase 7 signal-to-PnL layer. machinelearning.signal now provides immutable SignalRecord contracts, split conformal interval calibration, fractional Kelly position sizing, and a SignalPublisher that converts ModelOutput + regime probabilities + bar metadata into fully calibrated, fully sized trading signals. APH.backtest now provides a vectorized backtest engine, baseline-comparable metrics, and a printable/json report surface for evaluating whether those signals make money after simple spread costs.
+update: The signal layer was kept intentionally boundary-clean: no mt5pipe imports and no machinelearning.training internals. SignalPublisher accepts the real RegimeState surface from machinelearning.regime but also works with any [4]-probability vector so downstream integration is not blocked on the fitted detector artifact.
+update: Added synthetic contract coverage for conformal guarantees, Kelly sizing behavior, SignalRecord gating, SignalPublisher assembly, vectorized backtest PnL/cost handling, balanced accuracy range, and BacktestReport serialization/printing.
+needs: Ready to receive real signals once Agent 1 delivers the 90-day dataset and Agent 2 delivers a fitted RegimeDetector. I did not run the prompt’s real end-to-end dataset -> regime -> TFT -> conformal -> signals -> backtest pass yet because Agent 1 has not logged the required Phase 7 dataset completion/handoff in chat/coordination.md.
+files: machinelearning/signal/__init__.py, machinelearning/signal/records.py, machinelearning/signal/conformal.py, machinelearning/signal/sizing.py, machinelearning/signal/publisher.py, APH/backtest/__init__.py, APH/backtest/engine.py, APH/backtest/metrics.py, APH/backtest/report.py, machinelearning/tests/test_ml_signal.py, machinelearning/tests/test_ml_backtest.py, chat/contracts.md, chat/coordination.md, chat/agent_3.md
+verification: python -m pytest machinelearning/tests/test_ml_signal.py -q -p no:cacheprovider -> 10 passed in 4.33s; python -m pytest machinelearning/tests/test_ml_backtest.py -q -p no:cacheprovider -> 7 passed in 3.24s; python -m pytest machinelearning/tests -q -p no:cacheprovider -> 91 passed, 1 skipped in 10.94s; compileall on machinelearning/signal and APH/backtest -> True/True; public import smoke for machinelearning.signal, APH.backtest, APH.backtest.metrics, and APH.backtest.report -> ok
+```
 ```

@@ -158,3 +158,31 @@ fixes_applied:
 	- upgraded AttentionInspector to return real mean-attention and last-timestep attention tensors
 tests_added: 5
 verification: pytest machinelearning/tests -q -p no:cacheprovider -> 64 passed
+[2026-04-06T02:32:23-04:00]
+agent: agent_2
+feedback_read: yes
+feedback_source: feedbacks/latest.md
+feedback_summary: feedbacks/latest.md is stale and still describes Phase 6, but it reiterates the machinelearning-only boundary and the requirement to stay off mt5pipe internals. The active Phase 7 prompt supersedes the outdated phase label and narrows my scope to machinelearning/regime.
+phase: Phase 7
+area: machinelearning|regime
+plan: Build a standalone regime package with regime feature extraction, an online Gaussian-HMM wrapper, and a Mixture of Experts router over AphelionTFT experts. Add CPU-only synthetic tests under machinelearning/tests, log the new public symbols, and hand off the MoE interface to Agent 3 without touching DataPipeline or machinelearning/training.
+
+[2026-04-06T02:38:38-04:00]
+agent: agent_2
+area: machinelearning|regime
+summary: Completed the Phase 7 regime/MoE deliverable. Added machinelearning.regime with RegimeFeatureExtractor, RegimeState, RegimeDetector, GatingNetwork, and MixtureOfExperts, plus CPU-only synthetic tests covering extractor behavior, unfitted detector fallback, optional hmmlearn-backed save/load, gating normalization/gradients, MoE blending, utilization reporting, and gradient flow into all experts.
+verification: python -m pytest machinelearning/tests/test_ml_regime.py -q -p no:cacheprovider -> 10 passed, 1 skipped in 4.24s; python -m pytest machinelearning/tests/test_ml_models_bridge.py machinelearning/tests/test_ml_regime.py -q -p no:cacheprovider -> 34 passed, 1 skipped in 5.36s
+notes: skipped test is the hmmlearn-backed detector save/load contract because hmmlearn is not installed in this workspace; the detector remains fully importable and returns uniform regime probabilities before fitting by design.
+
+[2026-04-06T02:58:34-04:00]
+agent: agent_2
+phase: Phase 7 extension
+area: machinelearning/regime + machinelearning/models
+delivered:
+  - RegimeLabeler with parquet sidecar output
+  - AblationConfig, AblationResult, AblationRunner
+  - STANDARD_ABLATIONS covering 6 key ablation configs
+  - Tests for all new symbols
+needs: Agent 1 can call RegimeLabeler.label_parquet() on the 90-day dataset once compiled. Agent 3 can call AblationRunner.run_all() after training to validate that disagreement/* features rank above calendar features in VSN importance.
+verification: python -m pytest machinelearning/tests/test_ml_regime.py tests/test_ml_models.py -q -p no:cacheprovider -> 44 passed, 1 skipped in 6.17s; python -m pytest machinelearning/tests/test_ml_models_bridge.py machinelearning/tests/test_ml_regime.py -q -p no:cacheprovider -> 44 passed, 1 skipped in 5.49s
+notes: RegimeLabeler uses a time_utc-keyed sidecar instead of mutating sealed dataset artifacts. AblationRunner operates on batch['past_features'] / DEFAULT_SCHEMA.past_observed only, so session/* remains outside this first zero-retrain pass because those columns live in future_known under the current schema.

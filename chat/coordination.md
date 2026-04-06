@@ -292,3 +292,72 @@ tests_added: 18
 tests_total: 64
 open_items: 0
 notes: All requested Phase 6 hardening gaps are closed and verified. The machinelearning suite now includes a bridge file so `pytest machinelearning/tests -q -p no:cacheprovider` exercises the full Phase 6 stack layout in this worktree, including the model contract tests that still live under the repository-level tests directory.
+
+### [2026-04-06 02:32] Agent 2 - feedback/prompt mismatch note
+
+```
+agent: agent_2
+type: update
+area: machinelearning
+summary: feedbacks/latest.md is still the stale Phase 6 note, while the active task is a Phase 7 regime/MoE deliverable. Proceeding with the Phase 7 prompt as the current task source of truth and keeping all changes confined to machinelearning/regime plus machinelearning/tests.
+needs: Agent 1/3 should treat feedbacks/latest.md as outdated until it is refreshed for Phase 7.
+files: feedbacks/latest.md, machinelearning/regime/, machinelearning/tests/test_ml_regime.py
+```
+
+### [2026-04-06 02:31] Agent 1 - steering conflict note
+
+```
+agent: agent_1
+type: blocker
+area: data
+summary: feedbacks/latest.md still contains a Phase 6 machinelearning-only directive, while the active user task is a Phase 7 data/ expansion for 60d+ synchronized dual-broker history. Proceeding with the explicit user task in data/ and leaving machinelearning/ untouched.
+needs: Future human steering should update feedbacks/latest.md to reflect Phase 7 so the shared log no longer points Agent 1 away from the active deliverable.
+files: feedbacks/latest.md, data/, chat/agent_1.md
+```
+
+### [2026-04-06 02:32] Agent 3 - steering conflict note
+
+```
+agent: agent_3
+type: blocker
+area: machinelearning/signal | APH/backtest
+summary: feedbacks/latest.md still contains the Phase 6 training directive, while the active user task is a Phase 7 signal-generation and backtesting deliverable. Proceeding with the explicit Phase 7 prompt and keeping the work isolated to machinelearning/signal, APH/backtest, synthetic tests, and chat logs.
+needs: Future human steering should update feedbacks/latest.md to reflect Phase 7 so Agent 3 is not pointed back to the already-completed training layer.
+files: feedbacks/latest.md, machinelearning/signal/, APH/backtest/, machinelearning/tests/test_ml_signal.py, machinelearning/tests/test_ml_backtest.py
+```
+
+### [2026-04-06 02:38] Agent 2 - Phase 7 regime handoff
+
+```
+agent: agent_2
+type: handoff
+area: machinelearning
+summary: machinelearning.regime is ready for downstream integration. Public exports now include RegimeDetector, RegimeState, GatingNetwork, and MixtureOfExperts, with RegimeFeatureExtractor available for fixed-column regime input extraction.
+needs: Agent 3 can now build signal layer using MixtureOfExperts and GatingNetwork. RegimeDetector will be fitted on real data once Agent 1 delivers the 90-day dataset.
+files: machinelearning/regime/__init__.py, machinelearning/regime/features.py, machinelearning/regime/detector.py, machinelearning/regime/moe.py, machinelearning/tests/test_ml_regime.py
+verification: python -m pytest machinelearning/tests/test_ml_regime.py -q -p no:cacheprovider -> 10 passed, 1 skipped
+```
+
+### [2026-04-06 02:58] Agent 2 - labeler and ablation handoff
+
+```
+agent: agent_2
+type: handoff
+area: machinelearning
+summary: RegimeLabeler is ready to generate a time_utc-keyed sidecar parquet as soon as the 90-day dataset path exists, and AblationRunner is ready for post-training VSN family diagnostics without retraining.
+needs: Regime labeler is ready and waiting on Agent 1's 90-day dataset path. Agent 3 can call AblationRunner.run_all() after training; note that this first zero-retrain ablation pass operates on past_features only, so session/* remains outside it because those columns currently live in future_known.
+files: machinelearning/regime/labeler.py, machinelearning/models/ablation.py, machinelearning/tests/test_ml_regime.py, tests/test_ml_models.py
+verification: python -m pytest machinelearning/tests/test_ml_regime.py tests/test_ml_models.py -q -p no:cacheprovider -> 44 passed, 1 skipped
+```
+
+### [2026-04-06 02:50] Agent 3 - Phase 7 signal/backtest handoff
+
+```
+agent: agent_3
+type: handoff
+area: machinelearning/signal | APH/backtest
+summary: The Phase 7 signal-generation and vectorized backtest stack is green on synthetic contracts. machinelearning.signal now calibrates raw TFT intervals with split conformal prediction, sizes positions with fractional Kelly, and publishes immutable SignalRecord objects; APH.backtest now evaluates those records with vectorized PnL, baseline-comparable metrics, and a printable/json backtest report.
+needs: Ready to receive real signals once Agent 1 delivers the 90-day dataset and Agent 2 delivers a fitted RegimeDetector. SignalPublisher accepts any ModelOutput + any [4]-vector regime probs. I did not run the real end-to-end pass yet because Agent 1 has not logged the Phase 7 dataset completion/handoff needed by the prompt.
+files: machinelearning/signal/__init__.py, machinelearning/signal/records.py, machinelearning/signal/conformal.py, machinelearning/signal/sizing.py, machinelearning/signal/publisher.py, APH/backtest/__init__.py, APH/backtest/engine.py, APH/backtest/metrics.py, APH/backtest/report.py, machinelearning/tests/test_ml_signal.py, machinelearning/tests/test_ml_backtest.py
+verification: python -m pytest machinelearning/tests/test_ml_signal.py -q -p no:cacheprovider -> 10 passed; python -m pytest machinelearning/tests/test_ml_backtest.py -q -p no:cacheprovider -> 7 passed; python -m pytest machinelearning/tests -q -p no:cacheprovider -> 91 passed, 1 skipped; compileall on machinelearning/signal and APH/backtest plus public import smoke -> ok
+```

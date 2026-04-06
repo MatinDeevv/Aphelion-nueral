@@ -5,7 +5,18 @@ from __future__ import annotations
 import torch
 import pytest
 
-from machinelearning.models import AphelionTFT, AttentionInspector, ModelOutput, VSNInterpreter
+from machinelearning.data import DEFAULT_SCHEMA
+from machinelearning.data.schema import DISAGREEMENT_FAMILY_COLUMNS
+from machinelearning.models import (
+    AblationConfig,
+    AblationRunner,
+    AphelionModel,
+    AphelionTFT,
+    AttentionInspector,
+    ModelOutput,
+    STANDARD_ABLATIONS,
+    VSNInterpreter,
+)
 from machinelearning.models.base import HORIZONS, N_CLASSES, QUANTILES
 from machinelearning.models.blocks import (
     ClassificationHead,
@@ -99,6 +110,42 @@ def _head_tensor(output: ModelOutput, head_type: str, horizon: str) -> torch.Ten
     if head_type == "mfe":
         return output.mfe_preds[horizon]
     raise KeyError(head_type)
+
+
+class SpyAblationModel(AphelionModel):
+    """Capture ablated inputs and emit deterministic past-feature VSN weights."""
+
+    model_name = "spy-ablation"
+    model_version = "1.0.0"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.feature_scale = torch.nn.Parameter(torch.ones(DEFAULT_SCHEMA.n_past, dtype=torch.float32))
+        self.last_past_features: torch.Tensor | None = None
+
+    def forward(self, batch: dict[str, torch.Tensor | dict[str, torch.Tensor]]) -> ModelOutput:
+        past_features = batch["past_features"]
+        assert isinstance(past_features, torch.Tensor)
+
+        self.last_past_features = past_features.detach().clone()
+        scaled = past_features.abs() * self.feature_scale.view(1, 1, -1) + 1e-6
+        weights = scaled / scaled.sum(dim=-1, keepdim=True)
+
+        batch_size = past_features.size(0)
+        zero_class = past_features.new_zeros(batch_size, N_CLASSES)
+        zero_quantiles = past_features.new_zeros(batch_size, len(QUANTILES))
+        zero_scalar = past_features.new_zeros(batch_size)
+
+        return ModelOutput(
+            direction_logits={horizon: zero_class.clone() for horizon in HORIZONS},
+            tb_logits={horizon: zero_class.clone() for horizon in HORIZONS},
+            return_preds={horizon: zero_quantiles.clone() for horizon in HORIZONS},
+            mae_preds={horizon: zero_scalar.clone() for horizon in HORIZONS},
+            mfe_preds={horizon: zero_scalar.clone() for horizon in HORIZONS},
+            encoder_hidden=past_features.mean(dim=1),
+            vsn_weights={"past": weights},
+            attn_weights=None,
+        )
 
 
 def test_blocks_produce_expected_shapes() -> None:
@@ -441,3 +488,79 @@ def test_attention_inspector_returns_none_without_attn_weights_mapping() -> None
     inspector = AttentionInspector.from_output(output)
     assert inspector.mean_attention is None
     assert inspector.last_timestep_attention() is None
+
+
+def test_ablation_config_active_columns_excludes_family() -> None:
+    config = AblationConfig(name="test", excluded_families=["disagreement"], description="")
+    columns = config.active_columns
+
+    for column in DISAGREEMENT_FAMILY_COLUMNS:
+        assert column not in columns
+
+
+def test_ablation_config_full_has_all_columns() -> None:
+    full_config = STANDARD_ABLATIONS[0]
+    assert full_config.name == "full"
+    assert len(full_config.active_columns) == DEFAULT_SCHEMA.n_past
+
+
+def test_ablation_runner_zeros_correct_columns() -> None:
+    model = SpyAblationModel()
+    runner = AblationRunner(model)
+    batch = _make_default_schema_batch(batch_size=2, steps=4)
+    original = batch["past_features"].clone()
+    config = next(config for config in STANDARD_ABLATIONS if config.name == "no_disagreement")
+
+    runner.run_single(batch, config)
+
+    disagreement_indices = [DEFAULT_SCHEMA.past_observed.index(column) for column in DISAGREEMENT_FAMILY_COLUMNS]
+    assert model.last_past_features is not None
+    assert torch.all(model.last_past_features[..., disagreement_indices] == 0.0)
+    assert torch.any(original[..., disagreement_indices] != 0.0)
+    assert torch.allclose(batch["past_features"], original)
+
+
+def test_ablation_runner_vsn_weights_sum_to_one() -> None:
+    runner = AblationRunner(SpyAblationModel())
+    result = runner.run_single(_make_default_schema_batch(batch_size=2, steps=4), STANDARD_ABLATIONS[0])
+
+    assert pytest.approx(sum(result.vsn_importance.values()), rel=1e-5, abs=1e-5) == 1.0
+
+
+def test_ablation_runner_run_all_returns_correct_count() -> None:
+    runner = AblationRunner(SpyAblationModel())
+    results = runner.run_all(_make_default_schema_batch(batch_size=2, steps=4))
+
+    assert len(results) == len(STANDARD_ABLATIONS)
+
+
+def test_comparison_table_shape() -> None:
+    runner = AblationRunner(SpyAblationModel())
+    results = runner.run_all(_make_default_schema_batch(batch_size=2, steps=4))
+
+    table = runner.comparison_table(results)
+
+    assert table.shape == (len(results[0].family_importance), len(results) + 1)
+
+
+def _make_default_schema_batch(
+    batch_size: int = 2,
+    steps: int = 4,
+) -> dict[str, torch.Tensor | dict[str, torch.Tensor]]:
+    past_values = torch.arange(
+        1,
+        batch_size * steps * DEFAULT_SCHEMA.n_past + 1,
+        dtype=torch.float32,
+    ).view(batch_size, steps, DEFAULT_SCHEMA.n_past)
+    future_known = torch.ones(batch_size, steps, DEFAULT_SCHEMA.n_future, dtype=torch.float32)
+    static = torch.zeros(batch_size, DEFAULT_SCHEMA.n_static, dtype=torch.float32)
+    mask = torch.ones(batch_size, steps, dtype=torch.bool)
+
+    return {
+        "past_features": past_values,
+        "future_known": future_known,
+        "static": static,
+        "mask": mask,
+        "time_idx": torch.arange(batch_size, dtype=torch.int64),
+        "targets": {},
+    }

@@ -566,3 +566,59 @@ impact: the full deep-learning stack can now depend on machinelearning.training 
 docs_updated: yes
 notes: classification_loss uses focal weighting around the dominant flat class, ic_loss regularizes the 60m return median toward ranking signal, and train() persists the saved normalizer path beside checkpoints for inference reuse
 ```
+
+### [2026-04-06 02:38]
+
+```
+agent: agent_2
+type: contract-change
+module: machinelearning.regime.__init__, machinelearning.regime.features, machinelearning.regime.detector, machinelearning.regime.moe
+symbol: RegimeFeatureExtractor, RegimeState, RegimeDetector, GatingNetwork, MixtureOfExperts
+old: machinelearning.regime did not exist in this worktree, so there was no public regime-detection or regime-routed model boundary for downstream signal generation
+new: Phase 7 now exposes a standalone regime package with fixed-column regime feature extraction, a save/load Gaussian-HMM wrapper that emits soft four-regime states, and a regime-aware mixture-of-experts router over AphelionTFT experts
+impact: Agent 3 can consume machinelearning.regime only to derive regime probabilities, route encoder_hidden representations through soft expert weights, and monitor expert utilization without importing machinelearning.data internals, machinelearning.models internals, mt5pipe, or machinelearning.training
+docs_updated: yes
+notes: RegimeDetector.fit/load require hmmlearn at runtime, but MixtureOfExperts accepts any [B,4] regime_probs tensor so the signal layer can be integrated before the real fitted detector exists
+```
+
+### [2026-04-06 02:58]
+
+```
+agent: agent_2
+type: contract-change
+module: machinelearning.regime.__init__, machinelearning.regime.labeler, machinelearning.models.__init__, machinelearning.models.ablation
+symbol: RegimeLabeler, AblationConfig, AblationResult, AblationRunner, STANDARD_ABLATIONS
+old: machinelearning.regime stopped at online regime classification/MoE routing and machinelearning.models had no public zero-retrain feature-ablation surface
+new: Phase 7 extension adds an immutable time_utc-keyed regime-label sidecar writer plus a model-side ablation runner that zeros selected past-feature families and summarizes how VSN importance redistributes without retraining
+impact: Agent 1 can precompute regime sidecar parquet labels as soon as the 90-day dataset is compiled, and Agent 3 can run systematic post-training family ablations through machinelearning.models only to verify the disagreement edge is actually being used
+docs_updated: yes
+notes: RegimeLabeler outputs time_utc, regime_dominant, regime_trending, regime_mean_rev, regime_volatile, regime_quiet, and regime_confidence. AblationRunner operates on DEFAULT_SCHEMA.past_observed / batch['past_features']; under the current schema session/* lives in future_known and therefore remains outside this first zero-retrain ablation pass.
+```
+
+### [2026-04-06 02:50]
+
+```
+agent: agent_3
+type: contract-change
+module: machinelearning.signal.__init__, machinelearning.signal.records, machinelearning.signal.conformal, machinelearning.signal.sizing, machinelearning.signal.publisher
+symbol: SignalRecord, ConformalCalibrator, KellyPositionSizer, SignalPublisher
+old: no public Phase 7 signal boundary existed between machinelearning.models outputs and downstream risk/backtest consumers
+new: machinelearning.signal now exposes an immutable research-to-risk signal contract, split-conformal interval calibration with persisted q_hat state, fractional Kelly sizing based on conformal intervals and data quality, and a SignalPublisher that converts ModelOutput + regime probabilities + bar metadata into a fully populated SignalRecord
+impact: downstream paper-trading/backtest consumers can consume model predictions through machinelearning.signal only, without importing machinelearning.models internals, machinelearning.regime internals, machinelearning.training, or mt5pipe
+docs_updated: no
+notes: SignalPublisher accepts either the real RegimeState surface or any compatible [4]-probability vector, which keeps integration unblocked before a fitted detector artifact exists
+```
+
+### [2026-04-06 02:50]
+
+```
+agent: agent_3
+type: contract-change
+module: APH.backtest.__init__, APH.backtest.engine, APH.backtest.metrics, APH.backtest.report
+symbol: BacktestEngine, BacktestResult, BacktestMetrics, compute_metrics, BacktestReport
+old: no public Phase 7 backtest boundary existed for turning SignalRecord histories and realized returns into comparable strategy metrics
+new: APH.backtest now exposes a vectorized signal-quality backtest engine with fixed-notional spread-cost PnL, a persisted BacktestResult container, baseline-comparable performance metrics, and a printable/json report surface for checkpoint summaries
+impact: Agent 3 and later evaluation/reporting workflows can assess tradeability through APH.backtest only, using SignalRecord lists plus realized returns without importing training internals or re-implementing strategy metrics ad hoc
+docs_updated: no
+notes: the Phase 7 engine intentionally stays simple and vectorized for signal validation rather than realistic execution simulation; the real end-to-end pass will layer actual model outputs and a fitted regime detector on top of this stable boundary
+```

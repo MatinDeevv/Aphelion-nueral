@@ -110,6 +110,14 @@ update: added a pure-Polars WalkForwardSplitter with embargo-aware expanding tem
 update: machinelearning.data now exports WalkForwardSplitter, WalkForwardResult, and InferenceLoader alongside the existing schema/dataset/datamodule surface. Inference preprocessing stays aligned with training semantics: sort by time_utc, fill missing feature/static columns deterministically, preserve _filled-derived mask behavior, normalize with the saved stats, and omit targets from inference batches.
 verification: python -m pytest machinelearning/tests/test_ml_data.py -q -p no:cacheprovider -> 15 passed in 2.59s; compileall on machinelearning/data and machinelearning/tests/test_ml_data.py -> True
 
+[2026-04-06T02:31:33.2734658-04:00]
+feedback_read: yes
+feedback_source: feedbacks/latest.md
+feedback_summary: The latest steering file still describes Phase 6 machinelearning/ work, but the active user task is a Phase 7 data/ expansion. I am following the explicit Phase 7 request in data/ only, building live-history backfill and coverage validation tooling without touching machinelearning/.
+phase: Phase 7
+area: data
+plan: add standalone backfill/coverage scripts under data/scripts, add the 90d dataset and experiment specs under data/config, run live coverage validation/backfill/compile as far as the environment allows, and log the resulting dataset/trust status for Agent 2/3.
+
 [2026-04-06 12:00]
 phase: Phase 6 hardening
 area: machinelearning/data
