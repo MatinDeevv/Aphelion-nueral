@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 
 # Generated data pipeline artifacts
+local_data/**
 data/local_data/**
 !data/local_data/
 !data/local_data/README.md
