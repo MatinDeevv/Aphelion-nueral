@@ -226,3 +226,23 @@ needs: The strong claim is now green for the defined production slice 2026-03-30
 files: mt5pipe/compiler/models.py, mt5pipe/truth/service.py, mt5pipe/cli/dataset_cmds.py, mt5pipe/ingestion/ticks.py, mt5pipe/backfill/engine.py, mt5pipe/storage/parquet_store.py, mt5pipe/storage/paths.py, mt5pipe/state/service.py, mt5pipe/features/service.py, mt5pipe/features/artifacts.py, mt5pipe/labels/service.py, mt5pipe/labels/artifacts.py, mt5pipe/merge/canonical.py, mt5pipe/quality/merge_qa.py, config/datasets/xau_m1_core_v1.yaml, config/datasets/xau_m1_nonhuman_v1.yaml, tests/test_checkpoint.py, tests/test_canonical_merge.py, tests/test_truth_core.py, tests/test_artifact_lineage.py, tests/test_compiler.py, tests/test_training_flow.py
 verification: pytest tests/test_checkpoint.py tests/test_canonical_merge.py tests/test_merge_qa.py tests/test_truth_core.py tests/test_artifact_lineage.py tests/test_compiler.py tests/test_dataset_cli_compat.py tests/test_training_flow.py tests/test_catalog.py tests/test_boundary_imports.py -q -> 57 passed, 1 xfailed; python -m mt5pipe.cli.app backfill sync-ticks --broker-a broker_a --broker-b broker_b --symbol XAUUSD --from 2026-03-30 --to 2026-04-03 -> rows_added=0 on rerun with ticks_in_range 747,476 / 784,562; python -m mt5pipe.cli.app merge canonical --symbol XAUUSD --broker-a broker_a --broker-b broker_b --from 2026-03-30 --to 2026-04-02 -> canonical_dual_rows=215,777 dual_source_ratio=0.1639; python -m mt5pipe.cli.app dataset compile-dataset --spec config/datasets/xau_m1_nonhuman_v1.yaml --publish -> dataset.xau_m1_nonhuman.219cc1cdb344 published accepted 98.11; python -m mt5pipe.cli.app train run-experiment --spec config/experiments/xau_m1_nonhuman_direction_nb_v1.yaml -> experiment.xau_m1_nonhuman_direction_nb.b859ed294f94 and model.xau_m1_nonhuman_direction_nb.5f192c5412f2 linked to the trusted dataset alias
 ```
+
+### [2026-04-05 20:03:38 -04:00] agent_3 - Phase 6 training complete
+
+feedback_read: yes
+feedback_source: feedbacks/latest.md
+feedback_summary: Phase 6 is the self-contained deep-learning stack in machinelearning/, with Agent 3 owning training/ against the published dataset artifact and the 0.5354 walk-forward balanced-accuracy baseline. The training layer should optimize for real alpha signal, not generic loss minimization, and stay entirely off mt5pipe internals.
+phase: Phase 6
+area: machinelearning|training
+
+```
+agent: agent_3
+type: completion
+area: machinelearning|training
+summary: Delivered the Phase 6 training sector with NaN-safe quantile/regression losses, focal classification loss, 60m IC regularization, homoscedastic learned task weighting, a Lightning-style AphelionLightningModule, and a reproducible train() entry point plus CLI under machinelearning/training/.
+update: module.py now trains all 20 horizon/head combinations, logs per-task losses plus direction accuracy, balanced accuracy, and IC by horizon, and optimizes model parameters together with learned task-weight uncertainty terms. train.py wires the public AphelionDataModule and AphelionTFT surfaces into checkpointing, early stopping, W&B config logging, normalizer persistence, and a CPU-safe fallback trainer configuration when GPUs are unavailable.
+update: cleaned the requested probe noise from machinelearning/probe_dir/ and machinelearning/test_write_probe.txt, and added synthetic coverage for losses, learned task weights, training_step, and optimizer/scheduler wiring in machinelearning/tests/test_ml_training.py.
+needs: Code path is ready for real training, but I did not run an end-to-end Lightning + W&B experiment in this local environment because lightning and wandb are not installed here and the workspace is CPU-only. The package imports cleanly and the full machinelearning unit suite is green.
+files: machinelearning/training/__init__.py, machinelearning/training/losses.py, machinelearning/training/module.py, machinelearning/training/train.py, machinelearning/tests/test_ml_training.py, chat/agent_3.md, chat/contracts.md
+verification: pytest machinelearning/tests/test_ml_training.py -q -> 10 passed in 3.53s; pytest machinelearning/tests -q -> 25 passed in 3.55s; python import smoke for machinelearning.training -> AphelionLightningModule and train imported successfully; compileall over machinelearning/training and machinelearning/tests/test_ml_training.py -> True/True
+```

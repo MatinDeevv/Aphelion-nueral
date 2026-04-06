@@ -22,7 +22,10 @@ from data import (
     AphelionDataset,
     ColumnSchema,
     DEFAULT_SCHEMA,
+    InferenceLoader,
     RobustFeatureNormalizer,
+    WalkForwardResult,
+    WalkForwardSplitter,
 )
 from data.schema import (
     CLASSIFICATION_TARGET_COLUMNS,
@@ -197,6 +200,86 @@ def test_targets_come_from_last_bar_only(workspace_tmp_path: Path) -> None:
     assert second[classification_column].item() == 1
 
 
+def test_walk_forward_splitter_yields_three_expanding_folds() -> None:
+    frame = _walkforward_frame(rows=40)
+    splitter = WalkForwardSplitter(n_folds=3, val_fraction=0.30, embargo_rows=2)
+
+    folds = list(splitter.split(frame))
+
+    assert len(folds) == 3
+
+    previous_train_rows = 0
+    for train_df, val_df in folds:
+        assert train_df.height > previous_train_rows
+        assert train_df.get_column("time_utc").max() < val_df.get_column("time_utc").min()
+        train_end_row = train_df.get_column("row_id").max()
+        val_start_row = val_df.get_column("row_id").min()
+        assert (val_start_row - train_end_row - 1) >= 2
+        previous_train_rows = train_df.height
+
+
+def test_walk_forward_splitter_raises_when_dataset_too_small() -> None:
+    frame = _walkforward_frame(rows=20)
+    splitter = WalkForwardSplitter(n_folds=3, val_fraction=0.50, embargo_rows=4)
+
+    with pytest.raises(ValueError, match="dataset too small"):
+        list(splitter.split(frame))
+
+
+def test_walk_forward_result_mean_is_correct() -> None:
+    result = WalkForwardResult(
+        fold_metrics=[
+            {"balanced_accuracy": 0.50, "ic_60m": 0.10},
+            {"balanced_accuracy": 0.60, "ic_60m": 0.00},
+            {"balanced_accuracy": 0.70, "ic_60m": 0.20},
+        ]
+    )
+
+    assert result.mean["balanced_accuracy"] == pytest.approx(0.60)
+    assert result.mean["ic_60m"] == pytest.approx(0.10)
+    assert "fold_0" in result.summary_str()
+
+
+def test_inference_loader_prepare_batch_shapes_and_no_targets(workspace_tmp_path: Path) -> None:
+    frame = _base_frame(rows=12, feature_offset=4.0)
+    normalizer = RobustFeatureNormalizer(schema=DEFAULT_SCHEMA).fit(frame)
+    normalizer_path = workspace_tmp_path / "inference_normalizer.json"
+    normalizer.save(normalizer_path)
+
+    loader = InferenceLoader(normalizer_path=normalizer_path, context_len=4)
+    batch = loader.prepare_batch(frame)
+
+    assert tuple(batch["past_features"].shape) == (1, 4, DEFAULT_SCHEMA.n_past)
+    assert tuple(batch["future_known"].shape) == (1, 4, DEFAULT_SCHEMA.n_future)
+    assert tuple(batch["static"].shape) == (1, DEFAULT_SCHEMA.n_static)
+    assert tuple(batch["mask"].shape) == (1, 4)
+    assert tuple(batch["time_idx"].shape) == (1,)
+    assert "targets" not in batch
+
+
+def test_inference_loader_raises_when_context_is_too_short(workspace_tmp_path: Path) -> None:
+    frame = _base_frame(rows=3, feature_offset=6.0)
+    normalizer = RobustFeatureNormalizer(schema=DEFAULT_SCHEMA).fit(frame)
+    normalizer_path = workspace_tmp_path / "short_normalizer.json"
+    normalizer.save(normalizer_path)
+
+    loader = InferenceLoader(normalizer_path=normalizer_path, context_len=4)
+    with pytest.raises(ValueError, match="at least context_len rows"):
+        loader.prepare_batch(frame)
+
+
+def test_inference_loader_from_checkpoint_dir_loads_saved_stats(workspace_tmp_path: Path) -> None:
+    frame = _base_frame(rows=10, feature_offset=8.0)
+    fitted = RobustFeatureNormalizer(schema=DEFAULT_SCHEMA).fit(frame)
+    checkpoint_dir = workspace_tmp_path / "checkpoints"
+    checkpoint_dir.mkdir(parents=True)
+    fitted.save(checkpoint_dir / "run_alpha_normalizer.json")
+
+    loader = InferenceLoader.from_checkpoint_dir(checkpoint_dir, run_name="run_alpha", context_len=4)
+
+    assert loader.normalizer.stats == fitted.stats
+
+
 def _base_frame(rows: int, feature_offset: float) -> pl.DataFrame:
     base_time = dt.datetime(2026, 4, 1, 0, 0, tzinfo=dt.timezone.utc)
     data: dict[str, object] = {
@@ -224,3 +307,14 @@ def _base_frame(rows: int, feature_offset: float) -> pl.DataFrame:
                 data[column] = [feature_offset + (index * 0.5) for index in range(rows)]
 
     return pl.DataFrame(data)
+
+
+def _walkforward_frame(rows: int) -> pl.DataFrame:
+    base_time = dt.datetime(2026, 4, 1, 0, 0, tzinfo=dt.timezone.utc)
+    return pl.DataFrame(
+        {
+            "row_id": list(range(rows)),
+            "time_utc": [base_time + dt.timedelta(minutes=index) for index in range(rows)],
+            "value": [float(index) for index in range(rows)],
+        }
+    )

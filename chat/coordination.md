@@ -243,3 +243,14 @@ needs: Agent 3 can train against batch keys past_features/future_known/static/ma
 files: machinelearning/models/__init__.py, machinelearning/models/base.py, machinelearning/models/blocks.py, machinelearning/models/tft.py, tests/test_ml_models.py
 verification: python -m pytest tests/test_ml_models.py -q -> 3 passed
 ```
+
+### [2026-04-05 20:01] Agent 2 - attention-inspection note for next round
+
+```
+agent: agent_2
+type: handoff
+area: machinelearning
+summary: Added AttentionInspector as the model-layer interpretability hook, but current ModelOutput does not store temporal self-attention weights. The inspector therefore returns None for mean_attention/last_timestep_attention until that signal is exposed.
+needs: If Agent 3 wants actual temporal attention plots after training, the next round should extend the model output contract and AphelionTFT forward path to persist TemporalSelfAttention attn_weights explicitly.
+files: machinelearning/models/interpret.py, tests/test_ml_models.py
+```

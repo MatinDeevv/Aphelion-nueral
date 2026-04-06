@@ -501,3 +501,45 @@ impact: Agent 3 can depend on machinelearning.data only for schema cardinalities
 docs_updated: yes
 notes: data layer stays isolated from mt5pipe, machinelearning.models, and machinelearning.training; categorical targets remap {-1,0,1}->{0,1,2} with -100 ignore_index handling for missing labels
 ```
+
+### [2026-04-05 20:01]
+
+```
+agent: agent_2
+type: contract-change
+module: machinelearning.models.__init__, machinelearning.models.interpret, machinelearning.models.blocks
+symbol: VSNInterpreter, AttentionInspector, QuantileHead ordered-quantile behavior
+old: machinelearning.models exposed only the core model surface, and return quantile heads emitted unconstrained raw quantiles with no guarantee that higher quantiles were >= lower quantiles
+new: machinelearning.models now publicly exports VSNInterpreter and AttentionInspector for post-forward interpretability, and QuantileHead now emits nondecreasing quantiles by construction so return_preds and derived intervals preserve quantile ordering semantics
+impact: Agent 3 can inspect learned past-feature importance directly from ModelOutput.vsn_weights and can rely on ordered return quantiles for calibration/interval analysis without importing model internals
+docs_updated: no
+notes: AttentionInspector currently returns None for temporal attention summaries because ModelOutput does not yet store attn_weights; that capability is logged as a coordination note for a future round
+```
+
+### [2026-04-05 20:00]
+
+```
+agent: agent_1
+type: contract-change
+module: machinelearning.data.__init__, machinelearning.data.walkforward, machinelearning.data.inference
+symbol: WalkForwardSplitter, WalkForwardResult, InferenceLoader
+old: machinelearning.data exposed training-time schema/dataset/datamodule utilities only, with no public walk-forward evaluation helper or inference-time normalizer loader
+new: machinelearning.data now also exposes a pure-Polars expanding-window walk-forward splitter with embargo-aware temporal folds and aggregate fold metrics, plus an inference loader that reloads {run_name}_normalizer.json and converts recent bars into the single-sample batch dict expected by the TFT
+impact: Agent 3 can evaluate models on strict temporal folds without GPU dependencies and can rebuild inference-time batches from saved normalizer statistics without importing machinelearning.models or machinelearning.training internals
+docs_updated: no
+notes: WalkForwardSplitter stays PyTorch-free, embargo rows are documented as protection against forward-horizon label leakage, and InferenceLoader preserves training-time fill/mask semantics while omitting targets at inference
+```
+
+### [2026-04-05 20:03]
+
+```
+agent: agent_3
+type: contract-change
+module: machinelearning.training.__init__, machinelearning.training.losses, machinelearning.training.module, machinelearning.training.train
+symbol: quantile_loss, classification_loss, regression_loss, ic_loss, LearnedTaskWeights, AphelionLightningModule, train
+old: machinelearning/training public training surface did not exist in this worktree
+new: Phase 6 now exposes a standalone training boundary with multi-head financial loss functions, learned uncertainty task weighting, a Lightning-style module that logs per-horizon classification/IC metrics, and a train() entry point that composes the public data/model surfaces into checkpointed research runs
+impact: the full deep-learning stack can now depend on machinelearning.training only, while keeping training logic isolated from mt5pipe internals and from machinelearning.data/models internals
+docs_updated: yes
+notes: classification_loss uses focal weighting around the dominant flat class, ic_loss regularizes the 60m return median toward ranking signal, and train() persists the saved normalizer path beside checkpoints for inference reuse
+```

@@ -142,3 +142,10 @@ area: machinelearning|models
 summary: Completed the Phase 6 model-sector deliverable. Added the AphelionModel/ModelOutput boundary, reusable TFT building blocks, and AphelionTFT with multi-horizon direction/triple-barrier/quantile/MAE/MFE heads plus VSN interpretability weights for past and future inputs.
 verification: python -m pytest tests/test_ml_models.py -q -> 3 passed in 27.93s; python compileall over machinelearning/ and tests/ -> clean
 notes: Installed torch 2.11.0 into the local Python 3.14 environment to run the model tests in this workspace.
+[2026-04-05T20:01:13-04:00]
+agent: agent_2
+area: machinelearning|models
+summary: Hardened the Phase 6 model suite and added the first post-training interpretability utilities. tests/test_ml_models.py now covers individual block shapes, invalid head configuration, encoder_hidden and VSN-weight shapes, ordered quantiles, interval monotonicity, probability normalization, all-horizon presence, per-head gradient isolation, and lightweight interpretability checks.
+fix: QuantileHead previously emitted unconstrained raw quantiles, so higher quantiles could be below lower quantiles. I changed it to emit a base quantile plus positive cumulative increments, making return_preds monotonic along the quantile axis by construction.
+update: Added machinelearning.models.interpret with VSNInterpreter for past-feature importance summaries and AttentionInspector for temporal-attention inspection. Because ModelOutput still does not store attention weights, AttentionInspector currently returns None for mean_attention/last_timestep_attention; I logged that as a coordination note rather than expanding the output contract in this round.
+verification: python -m pytest tests/test_ml_models.py -q -p no:cacheprovider -> 21 passed in 2.91s; python public-surface smoke import for AphelionTFT/VSNInterpreter/AttentionInspector/ModelOutput -> ok

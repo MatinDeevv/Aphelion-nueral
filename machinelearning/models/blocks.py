@@ -173,7 +173,7 @@ class ClassificationHead(nn.Module):
 
 
 class QuantileHead(nn.Module):
-    """Map the shared prediction representation into a fixed set of return quantile forecasts."""
+    """Map the shared prediction representation into ordered return quantile forecasts."""
 
     def __init__(self, d_model: int, n_quantiles: int, dropout: float) -> None:
         super().__init__()
@@ -181,7 +181,14 @@ class QuantileHead(nn.Module):
         self.output = nn.Linear(d_model, n_quantiles)
 
     def forward(self, inputs: Tensor) -> Tensor:
-        return self.output(self.grn(inputs))
+        raw_quantiles = self.output(self.grn(inputs))
+        if raw_quantiles.size(-1) <= 1:
+            return raw_quantiles
+
+        base = raw_quantiles[..., :1]
+        positive_increments = F.softplus(raw_quantiles[..., 1:])
+        ordered_tail = base + torch.cumsum(positive_increments, dim=-1)
+        return torch.cat([base, ordered_tail], dim=-1)
 
 
 class RegressionHead(nn.Module):

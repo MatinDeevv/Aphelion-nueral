@@ -100,3 +100,12 @@ update: built the public machinelearning.data surface with ColumnSchema/DEFAULT_
 update: dataset loading now concatenates parquet parts, sorts by time_utc, zero-fills missing feature/static columns with warnings, preserves missing targets as typed nulls, derives mask=False from optional _filled rows, remaps categorical targets {-1,0,1}->{0,1,2} with -100 for missing labels, and takes all targets from the last bar of each context window only.
 verification: pytest tests/test_ml_data.py -q -> 9 passed in 2.25s; python import smoke with machinelearning on sys.path -> ColumnSchema, DEFAULT_SCHEMA, RobustFeatureNormalizer, AphelionDataset, AphelionDataModule imported successfully; compileall on data/ and tests/test_ml_data.py -> True/True
 handoff: Agent 3 can depend on machinelearning.data only, rely on DEFAULT_SCHEMA.n_past=75, DEFAULT_SCHEMA.n_future=8, DEFAULT_SCHEMA.n_static=1, and load/save the normalizer JSON identically for training and inference.
+[2026-04-05T20:00:22.3151822-04:00]
+feedback_read: yes
+feedback_source: feedbacks/latest.md
+feedback_summary: Phase 6 remains a self-contained machinelearning/ stack with Agent 1 owning data/, no mt5pipe internals, and downstream work judged against the published baseline. This extension is specifically about giving Agent 3 evaluation-time walk-forward splitting and deployment-time normalizer-backed inference loading.
+phase: Phase 6 extension
+area: machinelearning/data
+update: added a pure-Polars WalkForwardSplitter with embargo-aware expanding temporal folds plus WalkForwardResult fold aggregation/summary helpers, and added an InferenceLoader that reloads the saved normalizer JSON and rebuilds the single-sample batch dict expected by AphelionTFT.forward().
+update: machinelearning.data now exports WalkForwardSplitter, WalkForwardResult, and InferenceLoader alongside the existing schema/dataset/datamodule surface. Inference preprocessing stays aligned with training semantics: sort by time_utc, fill missing feature/static columns deterministically, preserve _filled-derived mask behavior, normalize with the saved stats, and omit targets from inference batches.
+verification: python -m pytest machinelearning/tests/test_ml_data.py -q -p no:cacheprovider -> 15 passed in 2.59s; compileall on machinelearning/data and machinelearning/tests/test_ml_data.py -> True
