@@ -17,16 +17,47 @@ from torch import Tensor, nn
 from .features import RegimeFeatureExtractor
 
 
-def _import_gaussian_hmm() -> type[Any]:
-    """Import and return hmmlearn's GaussianHMM with a clear failure message."""
+def _build_sequence_model(
+    *,
+    n_regimes: int,
+    covariance_type: str,
+    n_iter: int,
+) -> tuple[Any, str]:
+    """Return the best available probabilistic sequence model for regime fitting."""
 
     try:
         from hmmlearn.hmm import GaussianHMM
+    except ModuleNotFoundError:
+        GaussianHMM = None
+
+    if GaussianHMM is not None:
+        return (
+            GaussianHMM(
+                n_components=n_regimes,
+                covariance_type=covariance_type,
+                n_iter=n_iter,
+                random_state=7,
+            ),
+            "hmmlearn_gaussian_hmm",
+        )
+
+    try:
+        from sklearn.mixture import GaussianMixture
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "RegimeDetector.fit() requires hmmlearn. Install hmmlearn to fit or load a persisted detector.",
+            "RegimeDetector.fit() requires hmmlearn or scikit-learn. "
+            "Install one of them to fit or load a persisted detector.",
         ) from exc
-    return GaussianHMM
+
+    return (
+        GaussianMixture(
+            n_components=n_regimes,
+            covariance_type=covariance_type,
+            max_iter=n_iter,
+            random_state=7,
+        ),
+        "sklearn_gaussian_mixture",
+    )
 
 
 @dataclass(slots=True)
@@ -89,6 +120,7 @@ class RegimeDetector(nn.Module):
         self._feature_mean: np.ndarray | None = None
         self._feature_std: np.ndarray | None = None
         self._state_order: tuple[int, ...] = tuple(range(self.n_regimes))
+        self._backend: str = "unfitted"
 
     @property
     def is_fitted(self) -> bool:
@@ -114,16 +146,15 @@ class RegimeDetector(nn.Module):
         self._feature_std = np.maximum(std, 1e-6).astype(np.float32, copy=False)
         standardized = self._standardize(observations)
 
-        GaussianHMM = _import_gaussian_hmm()
-        model = GaussianHMM(
-            n_components=self.n_regimes,
+        model, backend = _build_sequence_model(
+            n_regimes=self.n_regimes,
             covariance_type=self.covariance_type,
             n_iter=self.n_iter,
-            random_state=7,
         )
         model.fit(standardized)
 
         self._model = model
+        self._backend = backend
         self._state_order = self._infer_state_order(np.asarray(model.means_, dtype=np.float32))
         return self
 
@@ -181,6 +212,7 @@ class RegimeDetector(nn.Module):
             "n_iter": self.n_iter,
             "covariance_type": self.covariance_type,
             "window": self.window,
+            "backend": self._backend,
             "feature_names": list(self.extractor.REGIME_FEATURE_COLS),
             "feature_mean": self._feature_mean.tolist(),
             "feature_std": self._feature_std.tolist(),
@@ -207,6 +239,7 @@ class RegimeDetector(nn.Module):
         detector._feature_mean = np.asarray(metadata["feature_mean"], dtype=np.float32)
         detector._feature_std = np.asarray(metadata["feature_std"], dtype=np.float32)
         detector._state_order = tuple(int(index) for index in metadata["state_order"])
+        detector._backend = str(metadata.get("backend", "loaded"))
         return detector
 
     def _posterior_probabilities(self, standardized: np.ndarray) -> np.ndarray:

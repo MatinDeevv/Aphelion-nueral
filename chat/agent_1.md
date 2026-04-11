@@ -127,3 +127,34 @@ fixes_applied:
 	- made InferenceLoader reject non-monotonic time_utc input instead of silently reordering deployment batches
 tests_added: 8
 verification: pytest machinelearning/tests -q -p no:cacheprovider -> 64 passed
+
+[2026-04-06T15:20:00-04:00]
+feedback_read: yes
+feedback_source: feedbacks/latest.md
+feedback_summary: Phase 7 requires wider synchronized history in data/ and a truth-gated dataset before downstream regime, signal, and backtest work can continue. I followed the explicit Phase 7 execution task in data/ only and left machinelearning/ untouched.
+phase: Phase 7
+area: data
+task: dataset compilation and NB baseline
+status: blocked
+update: created data/config/datasets/xau_m1_nonhuman_90d_v1.yaml and data/config/experiments/xau_m1_nonhuman_90d_direction_nb_v1.yaml with the requested 90-day refs/range. Bars build succeeded on the real root local_data tree after running the local CLI via .venv + PYTHONPATH=data + --config data/config/pipeline.yaml.
+bars_build_result: M1=83990, total=237481
+blocker: compile-dataset rejected publication for dataset.xau_m1_nonhuman_90d.20de720fb54e. The rejection is not a 2026-01-07 spillover: the full missing required_raw date set is exactly the 24 Saturdays/Sundays from 2026-01-10 through 2026-03-29, so adjusting date_from later would still leave recurring weekend failures in-range.
+next: waiting on truth/spec guidance for non-trading-day required_raw coverage handling or a different accepted contiguous range before rerunning compile-dataset and the NB baseline
+truth_report:
+```text
+artifact_id: dataset.xau_m1_nonhuman_90d.20de720fb54e
+logical: xau_m1_nonhuman_90d@1.0.0
+status: rejected
+manifest_path: local_data\pipeline_data\manifests\kind=dataset\name=xau_m1_nonhuman_90d-3e895b3fc990\manifest.dataset.x-1d971e90128f.json
+split_rows: {"test": 12323, "train": 58624, "val": 12322}
+trust_status: rejected
+trust_score_total: 97.60
+trust_decision: rejected for publication; source_quality: synchronized raw coverage is incomplete for required brokers: broker_a missing 2026-01-10, 2026-01-11, 2026-01-17, 2026-01-18, 2026-01-24, +19 more; broker_b missing 2026-01-10, 2026-01-11, 2026-01-17, 2026-01-18, 2026-01-24, +19 more
+trust_check_counts: {"failed": 1, "passed": 9, "warning": 0}
+trust_warning_reasons: []
+trust_rejection_reasons: ["source_quality: synchronized raw coverage is incomplete for required brokers: broker_a missing 2026-01-10, 2026-01-11, 2026-01-17, 2026-01-18, 2026-01-24, +19 more; broker_b missing 2026-01-10, 2026-01-11, 2026-01-17, 2026-01-18, 2026-01-24, +19 more"]
+quality_caveats: {"accepted_caveats": [], "green_blockers": [], "publication_blockers": ["source_quality below publication threshold (75.97 < 60.00)"]}
+source_quality_metrics: {"bucket_both_total": 2946144, "canonical_dual_rows_total": 2946144, "diagnostic_conflict_mean": 563.9344262295082, "diagnostic_dual_source_ratio_mean": 0.15757132606557375, "dual_source_days": 61, "dual_source_ratio_mean": 0.11308059870588234, "effective_conflict_mean": 404.70588235294116, "effective_dual_source_ratio_mean": 0.11308059870588234, "effective_observability_days": 85.0, "merge_conflict_mean": 404.70588235294116, "merge_diagnostics_days": 61.0, "merge_observability_source": "merge_qa", "merge_qa_days": 85.0, "required_raw_asymmetric_dates": [], "required_raw_brokers": ["broker_a", "broker_b"], "required_raw_missing_dates": {"broker_a": ["2026-01-10", "2026-01-11", "2026-01-17", "2026-01-18", "2026-01-24", "2026-01-25", "2026-01-31", "2026-02-01", "2026-02-07", "2026-02-08", "2026-02-14", "2026-02-15", "2026-02-21", "2026-02-22", "2026-02-28", "2026-03-01", "2026-03-07", "2026-03-08", "2026-03-14", "2026-03-15", "2026-03-21", "2026-03-22", "2026-03-28", "2026-03-29"], "broker_b": ["2026-01-10", "2026-01-11", "2026-01-17", "2026-01-18", "2026-01-24", "2026-01-25", "2026-01-31", "2026-02-01", "2026-02-07", "2026-02-08", "2026-02-14", "2026-02-15", "2026-02-21", "2026-02-22", "2026-02-28", "2026-03-01", "2026-03-07", "2026-03-08", "2026-03-14", "2026-03-15", "2026-03-21", "2026-03-22", "2026-03-28", "2026-03-29"]}, "state_filled_ratio": 0.0, "state_quality_mean": 84.88579136623595, "synchronized_raw_coverage_ratio": 0.717647, "synchronized_raw_days": 61}
+published_ref: -
+reason: source_quality: synchronized raw coverage is incomplete for required brokers: broker_a missing 2026-01-10, 2026-01-11, 2026-01-17, 2026-01-18, 2026-01-24, +19 more; broker_b missing 2026-01-10, 2026-01-11, 2026-01-17, 2026-01-18, 2026-01-24, +19 more
+```

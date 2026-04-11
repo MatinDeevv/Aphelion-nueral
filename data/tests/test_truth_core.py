@@ -401,6 +401,87 @@ def test_truth_rejects_required_dual_broker_dataset_without_synchronized_coverag
     assert any("dual-source overlap is required" in reason for reason in report.rejection_reasons)
 
 
+def test_synchronized_coverage_excludes_weekends(tmp_path) -> None:
+    dataset_df = _phase4_truth_dataset()
+    split_frames = _phase4_truth_split_frames(dataset_df)
+    feature_specs = _phase4_truth_feature_specs()
+    label_pack = _phase4_truth_label_pack()
+    spec = _phase4_truth_spec().model_copy(
+        update={
+            "date_from": dt.date(2026, 4, 6),
+            "date_to": dt.date(2026, 4, 12),
+            "required_raw_brokers": ["broker_a", "broker_b"],
+            "require_synchronized_raw_coverage": True,
+            "require_dual_source_overlap": False,
+        }
+    )
+    state_df = pl.DataFrame(
+        {
+            "quality_score": [95.0, 95.0],
+            "conflict_flag": [False, False],
+            "trust_flags": [[], []],
+        }
+    )
+
+    def build_report(root_name: str, *, skip_date: dt.date | None = None):
+        paths = StoragePaths(tmp_path / root_name / "pipeline_data")
+        store = ParquetStore(compression="snappy", row_group_size=1000)
+        manifest = _phase4_truth_manifest(
+            spec,
+            feature_specs,
+            label_pack,
+            artifact_id=f"dataset.xau_nonhuman.{root_name}",
+        )
+
+        current = spec.date_from
+        while current <= spec.date_to:
+            if current.weekday() < 5 and current != skip_date:
+                for broker_id in spec.required_raw_brokers:
+                    raw_ticks = pl.DataFrame(
+                        {
+                            "broker_id": [broker_id],
+                            "symbol": ["XAUUSD"],
+                            "time_utc": [dt.datetime.combine(current, dt.time(0, 0), tzinfo=UTC)],
+                            "time_msc": [int(dt.datetime.combine(current, dt.time(0, 0), tzinfo=UTC).timestamp() * 1000)],
+                            "bid": [3000.0],
+                            "ask": [3000.2],
+                            "last": [0.0],
+                            "volume": [1.0],
+                            "volume_real": [0.0],
+                            "flags": [6],
+                            "ingest_ts": [dt.datetime.combine(current, dt.time(0, 0), tzinfo=UTC)],
+                        }
+                    )
+                    store.write(raw_ticks, paths.raw_ticks_file(broker_id, "XAUUSD", current))
+            current += dt.timedelta(days=1)
+
+        return TruthService().evaluate_dataset(
+            artifact_id=manifest.artifact_id,
+            dataset_df=dataset_df,
+            split_frames=split_frames,
+            spec=spec,
+            feature_specs=feature_specs,
+            label_pack=label_pack,
+            manifest=manifest,
+            paths=paths,
+            store=store,
+            state_df=state_df,
+        )
+
+    weekend_ok = build_report("weekend_ok")
+    assert weekend_ok.status == "accepted"
+    assert weekend_ok.accepted_for_publication is True
+    assert not any("synchronized raw coverage is incomplete" in reason for reason in weekend_ok.rejection_reasons)
+
+    missing_wednesday = build_report("missing_wednesday", skip_date=dt.date(2026, 4, 8))
+    assert missing_wednesday.status == "rejected"
+    assert missing_wednesday.accepted_for_publication is False
+    assert any(
+        "synchronized raw coverage is incomplete" in reason and "2026-04-08" in reason
+        for reason in missing_wednesday.rejection_reasons
+    )
+
+
 def test_truth_rejects_feature_family_missingness_threshold_breach(tmp_path) -> None:
     dataset_df = pl.DataFrame(
         {

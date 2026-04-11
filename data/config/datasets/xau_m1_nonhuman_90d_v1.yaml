@@ -1,0 +1,40 @@
+schema_version: "1.0.0"
+dataset_name: "xau_m1_nonhuman_90d"
+version: "1.0.0"
+description: "90-day synchronized dual-broker XAUUSD M1 dataset"
+symbols:
+  - "XAUUSD"
+date_from: "2026-01-08"
+date_to: "2026-04-02"
+base_clock: "M1"
+state_version_ref: "state.default@1.0.0"
+feature_selectors:
+  - "time/*"
+  - "session/*"
+  - "quality/*"
+  - "htf_context/*"
+  - "disagreement/*"
+  - "event_shape/*"
+  - "entropy/*"
+  - "multiscale/*"
+label_pack_ref: "core_tb_volscaled@1.0.0"
+required_raw_brokers:
+  - "broker_a"
+  - "broker_b"
+require_synchronized_raw_coverage: true
+require_dual_source_overlap: true
+min_dual_source_ratio: 0.10
+filters:
+  - "exclude:filled_rows"
+split_policy: "temporal_holdout"
+train_ratio: 0.70
+val_ratio: 0.15
+test_ratio: 0.15
+embargo_rows: 240
+truth_policy_ref: "truth.default@1.0.0"
+publish_on_accept: true
+tags:
+  - "phase7"
+  - "xau"
+  - "nonhuman"
+  - "90d"

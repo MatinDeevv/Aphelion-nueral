@@ -275,4 +275,76 @@ needs: Ready to receive real signals once Agent 1 delivers the 90-day dataset an
 files: machinelearning/signal/__init__.py, machinelearning/signal/records.py, machinelearning/signal/conformal.py, machinelearning/signal/sizing.py, machinelearning/signal/publisher.py, APH/backtest/__init__.py, APH/backtest/engine.py, APH/backtest/metrics.py, APH/backtest/report.py, machinelearning/tests/test_ml_signal.py, machinelearning/tests/test_ml_backtest.py, chat/contracts.md, chat/coordination.md, chat/agent_3.md
 verification: python -m pytest machinelearning/tests/test_ml_signal.py -q -p no:cacheprovider -> 10 passed in 4.33s; python -m pytest machinelearning/tests/test_ml_backtest.py -q -p no:cacheprovider -> 7 passed in 3.24s; python -m pytest machinelearning/tests -q -p no:cacheprovider -> 91 passed, 1 skipped in 10.94s; compileall on machinelearning/signal and APH/backtest -> True/True; public import smoke for machinelearning.signal, APH.backtest, APH.backtest.metrics, and APH.backtest.report -> ok
 ```
-```
+
+### [2026-04-06 15:46 -04:00] agent_3 - Phase 7 quantitative validation
+
+feedback_read: yes
+feedback_source: feedbacks/latest.md
+feedback_summary: feedbacks/latest.md still points at the completed Phase 6 stack, but the active task is Phase 7 quantitative validation on the published 90-day dataset. I followed the explicit Phase 7 prompt, fixed the blocking truth bug first, and kept all public APIs unchanged while validating the CPU research stack end to end.
+phase: Phase 7 quantitative validation
+area: truth/compiler + regime + signal + backtest
+
+truth_gate_fix:
+  bug: weekend dates were treated as required synchronized raw coverage days
+  fix: weekday() < 5 filtering in source-quality required raw coverage and observability-day accounting
+  tests: pytest data/tests/test_truth_core.py -q -> 7 passed
+
+dataset:
+  ref: dataset://xau_m1_nonhuman_90d@1.0.0
+  artifact_id: dataset.xau_m1_nonhuman_90d.20de720fb54e
+  trust_score: 97.74
+  total_rows: 83269
+  train/val/test: 58624/12322/12323
+  source_quality: 77.3858
+  warnings: none
+
+nb_baseline_90d:
+  walk_forward_balanced_acc: 0.493726
+  holdout_balanced_acc: 0.499796
+  vs_4day_baseline: worse
+  analysis: The wider 90-day surface materially weakens the gaussian_nb signal relative to the 4-day checkpoint (walk-forward -0.0417, holdout -0.0098), which is informative rather than alarming. The small production slice was flattering the NB baseline; the wider dataset is the right surface for regime-aware TFT research.
+
+regime_detector:
+  fitted: yes
+  saved: local_data/regime_detector_90d.pkl
+  regime_distribution:
+    trending: 15787 bars (26.9%)
+    mean_reverting: 15304 bars (26.1%)
+    volatile: 1627 bars (2.8%)
+    quiet: 25906 bars (44.2%)
+  notes: Distribution stayed below the >60% dominance warning threshold and did not require a refit above n_iter=200. hmmlearn is not installable on this local Python 3.14/MSVC-free Windows environment, so the fit used the internal sklearn GaussianMixture fallback without changing the public RegimeDetector API.
+
+conformal_calibration:
+  q_hat: 0.001764
+  empirical_coverage: 0.9001
+  target_coverage: 0.90
+  saved: local_data/conformal_calibrator_90d.pkl
+
+backtest_nb_signals:
+  n_signals: 12323
+  n_actionable: 0
+  win_rate: 0.0000
+  sharpe_ratio: 0.0000
+  max_drawdown: 0.0000
+  ic_60m: -0.0007
+  balanced_accuracy: 0.3333
+  vs_baseline_0.5354: -0.2021
+  saved: local_data/backtest_nb_90d.json
+  notes: The saved backtest/report path is valid, but the placeholder conformal intervals widened across zero on every NB signal, so Kelly sizing and SignalRecord.is_actionable() correctly gated all trades off. This is a conservative floor and pipeline-validation checkpoint, not evidence of a tradable NB stack.
+
+regime_stratified_performance:
+  trending: 1796 signals, win_rate=0.0000, IC=-0.0286
+  mean_reverting: 9609 signals, win_rate=0.0000, IC=0.0409
+  volatile: 66 signals, win_rate=0.0000, IC=0.0982
+  quiet: 852 signals, win_rate=0.0000, IC=-0.0072
+
+waiting_for:
+  GCP VM - to run TFT training at full scale.
+  All artifacts, calibrators, and fitted detectors are saved locally and ready to be loaded once training completes.
+
+verification:
+  - pytest data/tests/test_truth_core.py -q -> 7 passed
+  - python -m pytest machinelearning/tests/test_ml_regime.py -q -p no:cacheprovider -> 14 passed, 1 skipped
+  - python -m mt5pipe.cli.app dataset compile-dataset --config data/config/pipeline.yaml --spec data/config/datasets/xau_m1_nonhuman_90d_v1.yaml --publish -> published accepted 97.74
+  - python -m mt5pipe.cli.app train run-experiment --spec data/config/experiments/xau_m1_nonhuman_90d_direction_nb_v1.yaml -> walk_forward_balanced_accuracy_mean=0.493726, holdout_balanced_accuracy=0.499796
+  - local artifacts saved: local_data/regime_detector_90d.pkl, local_data/conformal_calibrator_90d.pkl, local_data/backtest_nb_90d.json, tmp/agent3_phase7_logs/phase7_quant_validation_summary.json

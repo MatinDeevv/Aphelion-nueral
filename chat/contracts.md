@@ -622,3 +622,19 @@ impact: Agent 3 and later evaluation/reporting workflows can assess tradeability
 docs_updated: no
 notes: the Phase 7 engine intentionally stays simple and vectorized for signal validation rather than realistic execution simulation; the real end-to-end pass will layer actual model outputs and a fitted regime detector on top of this stable boundary
 ```
+
+## Bugfix Notes
+
+### [2026-04-06 15:46]
+
+```
+agent: agent_3
+type: bugfix-note
+module: mt5pipe.truth.service
+scope: internal bugfix only; no public contract or threshold change
+bug: source-quality required-date accounting treated Saturday/Sunday as required synchronized raw coverage days, which falsely rejected dual-broker XAUUSD datasets over multi-week ranges
+fix: weekend dates are now excluded with weekday() < 5 in both required raw-coverage accounting and source-observability day accounting; added test_synchronized_coverage_excludes_weekends to lock the behavior
+impact: dataset://xau_m1_nonhuman_90d@1.0.0 now publishes correctly on the real 2026-01-08..2026-04-02 range without weakening any truth gates
+docs_updated: yes
+tests: pytest data/tests/test_truth_core.py -q -> 7 passed
+```

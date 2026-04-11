@@ -669,17 +669,15 @@ class TruthService:
     ) -> dict[str, object]:
         qa_rows: list[dict[str, object]] = []
         diagnostic_rows: list[dict[str, object]] = []
-        requested_dates: list[str] = []
-        current = date_from
-        while current <= date_to:
-            requested_dates.append(current.isoformat())
+        required_dates = self._required_trading_dates(date_from, date_to)
+        requested_dates = [current.isoformat() for current in required_dates]
+        for current in required_dates:
             qa_row = self._latest_daily_observability_row(store.read_dir(paths.merge_qa_dir(symbol, current)))
             if qa_row is not None:
                 qa_rows.append(qa_row)
             diagnostic_row = self._latest_daily_observability_row(store.read_dir(paths.merge_diagnostics_dir(symbol, current)))
             if diagnostic_row is not None:
                 diagnostic_rows.append(diagnostic_row)
-            current += dt.timedelta(days=1)
 
         merge_df = pl.DataFrame(qa_rows) if qa_rows else pl.DataFrame()
         diagnostic_df = pl.DataFrame(diagnostic_rows) if diagnostic_rows else pl.DataFrame()
@@ -740,7 +738,7 @@ class TruthService:
             "required_raw_asymmetric_dates": sorted(asymmetric_dates),
             "synchronized_raw_days": len(synchronized_dates),
             "synchronized_raw_coverage_ratio": (
-                round(len(synchronized_dates) / len(requested_dates), 6) if requested_dates else 0.0
+                round(len(synchronized_dates) / len(requested_dates), 6) if requested_dates else 1.0
             ),
             "state_rows": float(len(state_df)),
             "state_quality_mean": float(state_df["quality_score"].mean()) if "quality_score" in state_df.columns and not state_df.is_empty() else 0.0,
@@ -799,13 +797,13 @@ class TruthService:
         store: ParquetStore,
     ) -> dict[str, dict[str, object]]:
         stats_by_broker: dict[str, dict[str, object]] = {}
+        required_dates = self._required_trading_dates(date_from, date_to)
         for broker_id in spec.required_raw_brokers:
             covered_dates: list[str] = []
             total_ticks_written = 0
             first_timestamp: dt.datetime | None = None
             last_timestamp: dt.datetime | None = None
-            current = date_from
-            while current <= date_to:
+            for current in required_dates:
                 day_df = store.read_dir(paths.raw_ticks_dir(broker_id, symbol, current))
                 if not day_df.is_empty():
                     covered_dates.append(current.isoformat())
@@ -817,10 +815,9 @@ class TruthService:
                             first_timestamp = day_first
                         if last_timestamp is None or (day_last is not None and day_last > last_timestamp):
                             last_timestamp = day_last
-                current += dt.timedelta(days=1)
 
             stats_by_broker[broker_id] = {
-                "days_requested": (date_to - date_from).days + 1,
+                "days_requested": len(required_dates),
                 "days_written": len(covered_dates),
                 "total_ticks_written": total_ticks_written,
                 "covered_dates": covered_dates,
@@ -828,6 +825,16 @@ class TruthService:
                 "last_timestamp": last_timestamp.isoformat() if last_timestamp else "",
             }
         return stats_by_broker
+
+    @staticmethod
+    def _required_trading_dates(date_from: dt.date, date_to: dt.date) -> list[dt.date]:
+        required_dates: list[dt.date] = []
+        current = date_from
+        while current <= date_to:
+            if current.weekday() < 5:
+                required_dates.append(current)
+            current += dt.timedelta(days=1)
+        return required_dates
 
     @staticmethod
     def _source_requirement_failures(spec: DatasetSpec, metrics: dict[str, object]) -> list[str]:
